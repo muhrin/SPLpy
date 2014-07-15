@@ -27,7 +27,7 @@ from pymatgen.apps.borg.hive import AbstractDrone
 from pymatgen.core.structure import Structure
 from pymatgen.symmetry.finder import SymmetryFinder
 
-from splpy.io.resio import Res
+from splpy.resio import Res
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +135,7 @@ class LjToDbTaskDrone(AbstractDrone):
 
     def __init__(self, host="127.0.0.1", port=27017, database="lj",
                  user=None, password=None, collection="structures",
-                 simulate_mode=False, additional_fields=None,
+                 tags=None, simulate_mode=False, additional_fields=None,
                  update_duplicates=True, use_full_uri=True):
         """
         Args:
@@ -154,6 +154,8 @@ class LjToDbTaskDrone(AbstractDrone):
                 None, which means no authentication.
             collection:
                 Collection to query. Defaults to "structures".
+            tags:
+                A list of tags to tag the assimilated structures with.
             simulate_mode:
                 Allows one to simulate db insertion without actually performing
                 the insertion.
@@ -175,6 +177,7 @@ class LjToDbTaskDrone(AbstractDrone):
         self.password = password
         self.collection = collection
         self.port = port
+        self.tags = tags
         self.simulate = simulate_mode
         self.additional_fields = {} if not additional_fields \
             else additional_fields
@@ -265,11 +268,17 @@ class LjToDbTaskDrone(AbstractDrone):
                 db.authenticate(self.user, self.password)
             coll = db[self.collection]
 
+            params_id = self._get_params_id(db, params)
+            if params_id is None:
+                logger.info("Failed to read params for {}, skipping.".format(d["file_name"]))
+                return
+
             d["last_updated"] = datetime.datetime.today()
             result = coll.find_one({"file_name": d["file_name"]},
                                    fields=["file_name", "_id"])
             if result is None or self.update_duplicates:
-                d["params_id"] = self._get_params_id(db, params)
+                d["params_id"] = params_id
+                d["tags"] = self.tags
 
                 if result is not None and "_id" in result:
                     id = result["_id"]
