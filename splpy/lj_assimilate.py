@@ -224,12 +224,37 @@ class LjToDbTaskDrone(AbstractDrone):
         Read the resfile and populate with the information we want to store in
         the db.
         """
+        d = cls.process_res(resfile)
+
+        d["schema_version"] = LjToDbTaskDrone.__version__
+
+        cls.post_process(resfile, d)
+
+        return d
+
+    @classmethod
+    def process_res(cls, resfile):
         fullpath = os.path.abspath(resfile)
         res = Res.from_file(resfile)
         d = res.to_dict
         d["file_name"] = fullpath
 
-        sg = SymmetryFinder(Structure.from_dict(d["structure"]), 0.1)
+        s = res.structure
+        # Set the composition and formulas for the system
+        comp = s.composition
+        el_amt = s.composition.get_el_amt_dict()
+        d.update({"unit_cell_formula": comp.to_dict,
+                  "reduced_cell_formula": comp.to_reduced_dict,
+                  "elements": list(el_amt.keys()),
+                  "nelements": len(el_amt),
+                  "pretty_formula": comp.reduced_formula,
+                  "anonymous_formula": comp.anonymized_formula,
+                  "nsites": comp.num_atoms,
+                  "chemsys": "-".join(sorted(el_amt.keys()))})
+        #d["density"] = s.density
+
+        # Figure out the symmetry group
+        sg = SymmetryFinder(s, 0.1)
         d["spacegroup"] = {"symbol": unicode(sg.get_spacegroup_symbol(),
                                              errors="ignore"),
                            "number": sg.get_spacegroup_number(),
@@ -238,10 +263,6 @@ class LjToDbTaskDrone(AbstractDrone):
                            "source": "spglib",
                            "crystal_system": sg.get_crystal_system(),
                            "hall": sg.get_hall()}
-
-        d["schema_version"] = LjToDbTaskDrone.__version__
-
-        cls.post_process(resfile, d)
 
         return d
 

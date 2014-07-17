@@ -1,3 +1,7 @@
+
+
+import os
+
 try:
     from setuptools import setup, find_packages
 except ImportError:
@@ -13,6 +17,8 @@ setup(
     packages=find_packages(),
     classifiers=[
         "Programming Language :: Python :: 2.7",
-        "Development Status:: 2 - Pre - Alpha"]
+        "Development Status:: 2 - Pre - Alpha"],
+    scripts=[os.path.join("scripts", f) for f in os.listdir("scripts")
+             if not os.path.isdir(os.path.join("scripts", f))]
 )
 
