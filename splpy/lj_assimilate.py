@@ -203,8 +203,9 @@ class LjToDbTaskDrone(AbstractDrone):
             for paramfile in glob.glob(os.path.join(path, "*.potparams")):
                 potparams = Potparams.from_file(paramfile)
                 for dir, params_entry in potparams.params.iteritems():
+                    abs_dir = os.path.join(path, dir)
                     params = get_lj_interactions(params_entry)
-                    for resfile in glob.glob(os.path.join(dir, "*.res")):
+                    for resfile in glob.glob(os.path.join(abs_dir, "*.res")):
                         d = self.generate_doc(resfile)
                         tid = self._insert_doc(d, params)
                         tids.append(tid)
@@ -289,16 +290,17 @@ class LjToDbTaskDrone(AbstractDrone):
                 db.authenticate(self.user, self.password)
             coll = db[self.collection]
 
-            params_id = self._get_params_id(db, params)
-            if params_id is None:
-                logger.info("Failed to read params for {}, skipping.".format(d["file_name"]))
-                return
+            #params_id = self._get_params_id(db, params)
+            #if params_id is None:
+            #    logger.info("Failed to read params for {}, skipping.".format(d["file_name"]))
+            #    return
+            d["potential"] = {"name": "lennard_jones", "params": params}
 
             d["last_updated"] = datetime.datetime.today()
             result = coll.find_one({"file_name": d["file_name"]},
                                    fields=["file_name", "_id"])
             if result is None or self.update_duplicates:
-                d["params_id"] = params_id
+                #d["params_id"] = params_id
                 d["tags"] = self.tags
 
                 if result is not None and "_id" in result:
