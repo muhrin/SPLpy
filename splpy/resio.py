@@ -6,9 +6,9 @@ Module implementing an Res file object class.
 
 from __future__ import division
 
-__author__ = "Martin Uhrin"
+__author__ = "Martin Uhrin, Georg Schusteritsch"
 __copyright__ = "Copyright 2014, Martin Uhrin"
-__version__ = "0.1"
+__version__ = "0.1.1"
 __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "Feb 14, 2014"
@@ -89,7 +89,7 @@ class Res(MSONable):
     def parse_title(line):
         info = dict()
 
-        tokens = line.split(' ')
+        tokens = line.split()
         num_tokens = len(tokens)
         # 1 = Name
         if num_tokens <= 1:
@@ -138,13 +138,13 @@ class Res(MSONable):
         coords = []
         info = dict()
         coord_patt = re.compile(
-            "(\w+)\s+([0-9]+)\s([0-9\-\.]+)\s+([0-9\-\.]+)\s+([0-9\-\.]+)\s+([0-9\-\.]+)"
+            "(\w+)\s+([0-9]+)\s+([0-9\-\.]+)\s+([0-9\-\.]+)\s+([0-9\-\.]+)\s+([0-9\-\.]+)"
         )
         lines = data.splitlines()
         line_no = 0
         while line_no < len(lines):
             line = lines[line_no]
-            tokens = line.split(' ')
+            tokens = line.split()
             if tokens:
                 if tokens[0] == 'TITL':
                     info = Res.parse_title(line)

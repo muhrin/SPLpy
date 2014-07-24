@@ -17,7 +17,7 @@ import unittest
 import os
 
 from pymatgen import Composition, Lattice, Structure
-from splpy.io.resio import Res
+from splpy.resio import Res
 
 test_dir = os.path.dirname(__file__)
 
