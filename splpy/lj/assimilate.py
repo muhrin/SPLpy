@@ -191,13 +191,26 @@ class LjToDbTaskDrone(AbstractDrone):
 
     def assimilate(self, path):
         """
-        Parses spl lj runs. Then insert the result into the db. and return the
+        Parses spl lj runs. Then insert the result into the db and return the
         ObjectId or doc of the insertion.
 
         Returns:
             If in simulate_mode, the entire doc is returned for debugging
             purposes. Else, only the ObjectId of the inserted doc is returned.
         """
+        conn = MongoClient(self.host, self.port)
+        db = conn[self.database]
+        if self.user:
+            db.authenticate(self.user, self.password)
+        coll = db[self.collection]
+
+
+        # Get the existing documents in the collection so that we
+        # can look out for duplicates, etc.
+        existing = dict()
+        for doc in coll.find({}, {"_id": 1, "file_name": 1}):
+            existing[doc["file_name"]] = doc["_id"]
+
         tids = []
         try:
             for paramfile in glob.glob(os.path.join(path, "*.potparams")):
@@ -206,9 +219,9 @@ class LjToDbTaskDrone(AbstractDrone):
                     abs_dir = os.path.join(path, dir)
                     params = get_lj_interactions(params_entry)
                     for resfile in glob.glob(os.path.join(abs_dir, "*.res")):
-                        d = self.generate_doc(resfile)
-                        tid = self._insert_doc(d, params)
-                        tids.append(tid)
+                        tid = self._assimilate_resfile(resfile, params, coll, existing)
+                        if tid is not None:
+                            tids.append(tid)
 
             return tids
         except Exception as ex:
@@ -219,17 +232,19 @@ class LjToDbTaskDrone(AbstractDrone):
             logger.error(traceback.format_exc(ex))
             return False
 
-    @classmethod
-    def generate_doc(cls, resfile):
+    def _generate_doc(self, resfile, params):
         """
         Read the resfile and populate with the information we want to store in
         the db.
         """
-        d = cls.process_res(resfile)
+        d = self.process_res(resfile)
 
+        d["potential"] = {"name": "lennard_jones", "params": params}
+        d["last_updated"] = datetime.datetime.today()
+        d["tags"] = self.tags
         d["schema_version"] = LjToDbTaskDrone.__version__
 
-        cls.post_process(resfile, d)
+        self.post_process(resfile, d)
 
         return d
 
@@ -286,49 +301,35 @@ class LjToDbTaskDrone(AbstractDrone):
     def normalised_symmetry_precision(cls, structure, precision=0.01):
         return precision * cls.length_per_site(structure)
 
-
-    def _insert_doc(self, d, params):
+    def _assimilate_resfile(self, resfile, params, coll, existing):
+        file_name = get_uri(resfile)
         if not self.simulate:
-            # Perform actual insertion into db. Because db connections cannot
-            # be pickled, every insertion needs to create a new connection
-            # to the db.
-            conn = MongoClient(self.host, self.port)
-            db = conn[self.database]
-            if self.user:
-                db.authenticate(self.user, self.password)
-            coll = db[self.collection]
+            # Check if we've got this file in the database already
+            id = existing.get(file_name)
+            d = dict()
+            if id is None:
+                d = self._generate_doc(resfile, params)
 
-            #params_id = self._get_params_id(db, params)
-            #if params_id is None:
-            #    logger.info("Failed to read params for {}, skipping.".format(d["file_name"]))
-            #    return
-            d["potential"] = {"name": "lennard_jones", "params": params}
+                id = ObjectId()
+                d["_id"] = id
+                coll.insert(d)
+                return id
 
-            d["last_updated"] = datetime.datetime.today()
-            result = coll.find_one({"file_name": d["file_name"]},
-                                   fields=["file_name", "_id"])
-            if result is None or self.update_duplicates:
-                #d["params_id"] = params_id
-                d["tags"] = self.tags
+            elif self.update_duplicates:
+                d = self._generate_doc(resfile, params)
 
-                if result is not None and "_id" in result:
-                    id = result["_id"]
-                else:
-                    id = ObjectId()
+                coll.update({"_id": id}, d)
+                return id
 
-                coll.update({"file_name": d["file_name"]}, {"$set": d},
-                            upsert=True)
-
-                logger.info("Inserting {} with _id = {}"
-                            .format(d["file_name"], id))
-
-                return str(id)
+            if id is None:
+                logger.info("Skipping duplicate {} with id {}".format(file_name, id))
             else:
-                logger.info("Skipping duplicate {}".format(d["file_name"]))
+                logger.info("Inserting {} with _id = {}".format(file_name, id))
+
         else:
             logger.info("Simulated insert into database for {}"
-                        .format(d["file_name"]))
-            return d
+                        .format(file_name))
+            return self._generate_doc(resfile, params)
 
     def _get_params_id(self, db, params):
         if not self.simulate:
