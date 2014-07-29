@@ -194,7 +194,7 @@ class LennardJonesSearchRange(object):
             self.n = n
             self.cut = cut
 
-        def to_criteria(self):
+        def to_dict(self):
             if self.species_pair is None:
                 return
 
@@ -241,10 +241,10 @@ class LennardJonesSearchRange(object):
     def add_interaction(self, inter):
         self.interactions[inter.species_pair] = inter
 
-    def to_criteria(self):
+    def to_dict(self):
         c = dict()
         for interaction in self.interactions.itervalues():
-            criteria = interaction.to_criteria()
+            criteria = interaction.to_dict()
             if criteria is not None:
                 c.update(criteria)
 

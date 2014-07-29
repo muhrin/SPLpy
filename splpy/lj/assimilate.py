@@ -7,7 +7,7 @@ and insert it into a Mongo database.
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2014"
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "May 27, 2014"
@@ -24,7 +24,6 @@ from pymongo import MongoClient
 from bson.objectid import ObjectId
 
 from pymatgen.apps.borg.hive import AbstractDrone
-from pymatgen.core.structure import Structure
 from pymatgen.symmetry.finder import SymmetryFinder
 
 from splpy.resio import Res
@@ -44,8 +43,16 @@ class Potparams(object):
         value: an array containing strings of the parameters
     """
 
-    def __init__(self, params):
+    def __init__(self, params=None):
         self.params = params
+
+    def update(self, other):
+        if other.params is None or len(other.params) == 0:
+            return
+
+        if self.params is None:
+            self.params = dict()
+        self.params.update(other.params)
 
     @staticmethod
     def from_file(filename):
@@ -204,7 +211,6 @@ class LjToDbTaskDrone(AbstractDrone):
             db.authenticate(self.user, self.password)
         coll = db[self.collection]
 
-
         # Get the existing documents in the collection so that we
         # can look out for duplicates, etc.
         existing = dict()
@@ -212,16 +218,22 @@ class LjToDbTaskDrone(AbstractDrone):
             existing[doc["file_name"]] = doc["_id"]
 
         tids = []
+
+        abs_path = os.path.abspath(path)
+        potparams = Potparams()
+        parent = os.path.join(abs_path, os.path.pardir)
+        for file in glob.glob(os.path.join(parent, "*.potparams")):
+            potparams.update(Potparams.from_file(file))
         try:
-            for paramfile in glob.glob(os.path.join(path, "*.potparams")):
-                potparams = Potparams.from_file(paramfile)
-                for dir, params_entry in potparams.params.iteritems():
-                    abs_dir = os.path.join(path, dir)
-                    params = get_lj_interactions(params_entry)
-                    for resfile in glob.glob(os.path.join(abs_dir, "*.res")):
-                        tid = self._assimilate_resfile(resfile, params, coll, existing)
-                        if tid is not None:
-                            tids.append(tid)
+            params_entry = potparams.params.get(os.path.relpath(abs_path, parent))
+            if params_entry is not None:
+                params = get_lj_interactions(params_entry)
+                for resfile in glob.glob(os.path.join(abs_path, "*.res")):
+                    tid = self._assimilate_resfile(resfile, params, db, existing)
+                    if tid is not None:
+                        # Need to convert the ObjectId to string as returned
+                        # list has to contain only MSONAble types
+                        tids.append(str(tid))
 
             return tids
         except Exception as ex:
@@ -301,22 +313,27 @@ class LjToDbTaskDrone(AbstractDrone):
     def normalised_symmetry_precision(cls, structure, precision=0.01):
         return precision * cls.length_per_site(structure)
 
-    def _assimilate_resfile(self, resfile, params, coll, existing):
+    def _assimilate_resfile(self, resfile, params, db, existing):
         file_name = get_uri(resfile)
         if not self.simulate:
+            coll = db[self.collection]
             # Check if we've got this file in the database already
             id = existing.get(file_name)
             d = dict()
             if id is None:
+                # Inserting new structure
                 d = self._generate_doc(resfile, params)
 
                 id = ObjectId()
                 d["_id"] = id
+                d["params_id"] = self._find_or_create_params_id(db, params)
                 coll.insert(d)
                 return id
 
             elif self.update_duplicates:
+                # Updating existing structure
                 d = self._generate_doc(resfile, params)
+                d["params_id"] = self._find_or_create_params_id(db, params)
 
                 coll.update({"_id": id}, d)
                 return id
@@ -331,7 +348,10 @@ class LjToDbTaskDrone(AbstractDrone):
                         .format(file_name))
             return self._generate_doc(resfile, params)
 
-    def _get_params_id(self, db, params):
+    def _find_or_create_params_id(self, db, params):
+        """
+        Get the ObjectId for the parameters supplied.  If not found, create.
+        """
         if not self.simulate:
             params_collection = db["params"]
             entry = params_collection.find_one({"params": params})
@@ -348,9 +368,13 @@ class LjToDbTaskDrone(AbstractDrone):
         A Lennard-Jones run can be assimilated from a potparam file.
         """
         (parent, subdirs, files) = path
-        if len(glob.glob(os.path.join(parent, "*.potparams"))) > 0:
-            return [parent]
-        return []
+        dirs = list()
+        for potparam_file in glob.glob(os.path.join(parent, "*.potparams")):
+            for dir in Potparams.from_file(potparam_file).params.keys():
+                abs_dir = os.path.join(parent, dir)
+                if os.path.exists(abs_dir):
+                    dirs.append(abs_dir)
+        return dirs
 
     def __str__(self):
         return "LjToDbTaskDrone"
