@@ -42,8 +42,11 @@ def main():
                         help="Number of CPUs to use in inserting. If "
                              "not specified, multiprocessing will use "
                              "the number of cpus detected.")
-    parser.add_argument("--no-update", dest="no_update", type=bool, default=False, const=True, nargs="?",
-                        help="Don't update duplicates that already exist in the database")
+    parser.add_argument("--update-duplicates", dest="update_duplicates", action='store_true',
+                         help="Check for duplicates in database and update if exist, insert otherwise.")
+    parser.add_argument("--no-update-duplicates", dest="update_duplicates", action='store_false',
+                         help="Check for duplicates in database and don't update if exist, insert otherwise.")
+    parser.set_defaults(update_duplicates=None)
 
     args = parser.parse_args()
 
@@ -51,7 +54,7 @@ def main():
     if args.tags is not None:
         tags = args.tags.split(',')
 
-    drone = LjToDbTaskDrone(args.host, args.port, tags=tags, update_duplicates=not args.no_update)
+    drone = LjToDbTaskDrone(args.host, args.port, tags=tags, update_duplicates=args.update_duplicates)
     ncpus = multiprocessing.cpu_count() if not args.ncpus else args.ncpus
     queen = BorgQueen(drone, args.assimilate_path, ncpus)
     #entries = queen.get_data()

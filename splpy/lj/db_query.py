@@ -203,27 +203,27 @@ class LennardJonesSearchRange(object):
             # Epsilon
             condition = self._param_to_condition(self.epsilon)
             if condition is not None:
-                criteria["potential.params.{}.epsilon".format(self.species_pair)] = condition
+                criteria["{}.epsilon".format(self.species_pair)] = condition
 
             # Sigma
             condition = self._param_to_condition(self.sigma)
             if condition is not None:
-                criteria["potential.params.{}.sigma".format(self.species_pair)] = condition
+                criteria["{}.sigma".format(self.species_pair)] = condition
 
             # M
             condition = self._param_to_condition(self.m)
             if condition is not None:
-                criteria["potential.params.{}.m".format(self.species_pair)] = condition
+                criteria["{}.m".format(self.species_pair)] = condition
 
             # N
             condition = self._param_to_condition(self.n)
             if condition is not None:
-                criteria["potential.params.{}.n".format(self.species_pair)] = condition
+                criteria["{}.n".format(self.species_pair)] = condition
 
             # Cut
             condition = self._param_to_condition(self.cut)
             if condition is not None:
-                criteria["potential.params.{}.cut".format(self.species_pair)] = condition
+                criteria["{}.cut".format(self.species_pair)] = condition
 
             return criteria
 

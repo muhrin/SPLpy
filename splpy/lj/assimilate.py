@@ -27,6 +27,7 @@ from pymatgen.apps.borg.hive import AbstractDrone
 from pymatgen.symmetry.finder import SymmetryFinder
 
 from splpy.resio import Res
+import splpy.util as util
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +141,25 @@ class LjToDbTaskDrone(AbstractDrone):
     #Version of this lj assimilate document.
     __version__ = "0.0.1"
 
+    class ParamsInfo(object):
+        def __init__(self, collection, params):
+            self._collection = collection
+            self.params = params
+            self._params_id = None
+
+        def fetch_id(self):
+            if self._params_id is None:
+                self._params_id = self._find_or_create_params_id()
+            return self._params_id
+
+        def _find_or_create_params_id(self):
+            """
+            Get the ObjectId for the parameters supplied.  If not found, create.
+            """
+            entry = util.find_or_create(self._collection, self.params, self.params,
+                                        fields={"_id": 1})
+            return entry["_id"]
+
     def __init__(self, host="127.0.0.1", port=27017, database="lj",
                  user=None, password=None, collection="structures",
                  tags=None, simulate_mode=False, additional_fields=None,
@@ -209,13 +229,6 @@ class LjToDbTaskDrone(AbstractDrone):
         db = conn[self.database]
         if self.user:
             db.authenticate(self.user, self.password)
-        coll = db[self.collection]
-
-        # Get the existing documents in the collection so that we
-        # can look out for duplicates, etc.
-        existing = dict()
-        for doc in coll.find({}, {"_id": 1, "file_name": 1}):
-            existing[doc["file_name"]] = doc["_id"]
 
         tids = []
 
@@ -228,8 +241,9 @@ class LjToDbTaskDrone(AbstractDrone):
             params_entry = potparams.params.get(os.path.relpath(abs_path, parent))
             if params_entry is not None:
                 params = get_lj_interactions(params_entry)
+                params_info = LjToDbTaskDrone.ParamsInfo(db["params"], params)
                 for resfile in glob.glob(os.path.join(abs_path, "*.res")):
-                    tid = self._assimilate_resfile(resfile, params, db, existing)
+                    tid = self._assimilate_resfile(resfile, params_info, db)
                     if tid is not None:
                         # Need to convert the ObjectId to string as returned
                         # list has to contain only MSONAble types
@@ -313,55 +327,41 @@ class LjToDbTaskDrone(AbstractDrone):
     def normalised_symmetry_precision(cls, structure, precision=0.01):
         return precision * cls.length_per_site(structure)
 
-    def _assimilate_resfile(self, resfile, params, db, existing):
-        file_name = get_uri(resfile)
+    def _assimilate_resfile(self, resfile, params_info, db):
+        uri = get_uri(resfile)
         if not self.simulate:
             coll = db[self.collection]
-            # Check if we've got this file in the database already
-            id = existing.get(file_name)
-            d = dict()
-            if id is None:
-                # Inserting new structure
-                d = self._generate_doc(resfile, params)
 
-                id = ObjectId()
-                d["_id"] = id
-                d["params_id"] = self._find_or_create_params_id(db, params)
+            if self.update_duplicates is None:
+                # Must be none, just insert
+                d = self._generate_doc(resfile, params_info.params)
+                d["_id"] = ObjectId()
+                d["potential"]["params_id"] = params_info.fetch_id()
                 coll.insert(d)
-                return id
-
-            elif self.update_duplicates:
-                # Updating existing structure
-                d = self._generate_doc(resfile, params)
-                d["params_id"] = self._find_or_create_params_id(db, params)
-
-                coll.update({"_id": id}, d)
-                return id
-
-            if id is None:
-                logger.info("Skipping duplicate {} with id {}".format(file_name, id))
             else:
-                logger.info("Inserting {} with _id = {}".format(file_name, id))
+                # WARNING: The version of the insert below is NOT atomic
+                result = coll.find_one({"file_name": uri}, fields=["_id"])
+
+                if result is not None and not self.update_duplicates:
+                    logger.info("Skipping duplicate {} with id {}".format(uri, result["_id"]))
+                else:
+                    # Need to either update or insert
+                    d = self._generate_doc(resfile, params)
+                    d["potential"]["params_id"] = params_info.fetch_id()
+                    if result is None:
+                        d["_id"] = ObjectId()
+                        coll.insert(d)
+                    else:
+                        coll.update({"_id": result["_id"]}, {"$set": d})
+                        # Make sure this comes after update or it will fail!
+                        d.update(result)
+
+                    logger.info("Inserted {} with _id = {}".format(d["file_name"], d["_id"]))
 
         else:
-            logger.info("Simulated insert into database for {}"
-                        .format(file_name))
-            return self._generate_doc(resfile, params)
+            logger.info("Simulated insert into database for {}".format(uri))
+            return self._generate_doc(resfile, params_info.params)
 
-    def _find_or_create_params_id(self, db, params):
-        """
-        Get the ObjectId for the parameters supplied.  If not found, create.
-        """
-        if not self.simulate:
-            params_collection = db["params"]
-            entry = params_collection.find_one({"params": params})
-            if entry is None:
-                id = params_collection.insert({"params": params})
-            else:
-                id = entry["_id"]
-            return id
-        else:
-            return 0
 
     def get_valid_paths(self, path):
         """
