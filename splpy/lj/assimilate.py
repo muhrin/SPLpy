@@ -278,14 +278,14 @@ class LjToDbTaskDrone(AbstractDrone):
     def process_res(cls, resfile):
         fullpath = os.path.abspath(resfile)
         res = Res.from_file(resfile)
-        d = res.to_dict
+        d = res.to_criteria
         d["file_name"] = fullpath
 
         s = res.structure
         # Set the composition and formulas for the system
         comp = s.composition
         el_amt = s.composition.get_el_amt_dict()
-        d.update({"unit_cell_formula": comp.to_dict,
+        d.update({"unit_cell_formula": comp.to_criteria,
                   "reduced_cell_formula": comp.to_reduced_dict,
                   "elements": list(el_amt.keys()),
                   "nelements": len(el_amt),

@@ -199,7 +199,7 @@ class Res(MSONable):
         for site in self.structure_:
             coords = site.frac_coords
             lines.append(
-                fmtstr.format(site.species_string, species_types.index(site.specie) + 1, coords[0], coords[1],
+                fmtstr.format(site.specie, species_types.index(site.specie) + 1, coords[0], coords[1],
                               coords[2]))
         lines.append('END')
 
@@ -223,7 +223,7 @@ class Res(MSONable):
     def to_dict(self):
         return {"@module": self.__class__.__module__,
                 "@class": self.__class__.__name__,
-                "structure": self.structure_.to_dict,
+                "structure": self.structure_.to_criteria,
                 "name": self.name,
                 "pressure": self.pressure,
                 "energy": self.energy,

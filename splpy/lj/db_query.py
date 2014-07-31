@@ -10,6 +10,8 @@ __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "Jul 16, 2014"
 
+import re
+
 
 class HalfOpenInterval(object):
     """
@@ -54,6 +56,16 @@ class HalfOpenInterval(object):
 
     start = property(fget=lambda self: self._start, doc="The interval's start")
     end = property(fget=lambda self: self._end, doc="The interval's end")
+
+    @classmethod
+    def from_string(cls, str):
+        inter_patt = re.compile("\[([0-9\-\.]+)\s*,\s*([0-9\-\.]+)\)")
+        match = inter_patt.match(str)
+        if not match:
+            return None
+
+        return HalfOpenInterval(float(match.group(1)), float(match.group(2)))
+
 
     def __str__(self):
         """As string."""
@@ -186,44 +198,40 @@ class LennardJonesSearchRange(object):
         (string convertible)- match exactly this value
         """
 
-        def __init__(self, species_pair, epsilon=None, sigma=None, m=None, n=None, cut=None):
-            self.species_pair = species_pair
+        def __init__(self, epsilon=None, sigma=None, m=12, n=6, cut=2.5):
             self.epsilon = epsilon
             self.sigma = sigma
             self.m = m
             self.n = n
             self.cut = cut
 
-        def to_dict(self):
-            if self.species_pair is None:
-                return
-
+        def to_criteria(self):
             criteria = dict()
 
             # Epsilon
             condition = self._param_to_condition(self.epsilon)
             if condition is not None:
-                criteria["{}.epsilon".format(self.species_pair)] = condition
+                criteria["epsilon"] = condition
 
             # Sigma
             condition = self._param_to_condition(self.sigma)
             if condition is not None:
-                criteria["{}.sigma".format(self.species_pair)] = condition
+                criteria["sigma"] = condition
 
             # M
             condition = self._param_to_condition(self.m)
             if condition is not None:
-                criteria["{}.m".format(self.species_pair)] = condition
+                criteria["m"] = condition
 
             # N
             condition = self._param_to_condition(self.n)
             if condition is not None:
-                criteria["{}.n".format(self.species_pair)] = condition
+                criteria["n"] = condition
 
             # Cut
             condition = self._param_to_condition(self.cut)
             if condition is not None:
-                criteria["{}.cut".format(self.species_pair)] = condition
+                criteria["cut"] = condition
 
             return criteria
 
@@ -235,17 +243,38 @@ class LennardJonesSearchRange(object):
             else:
                 return param
 
+        def __str__(self):
+            conditions = list()
+            if self.epsilon is not None:
+                conditions.append("epsilon: {}".format(self.epsilon))
+            if self.sigma is not None:
+                conditions.append("sigma: {}".format(self.sigma))
+            if self.m is not None:
+                conditions.append("m: {}".format(self.m))
+            if self.n is not None:
+                conditions.append("n: {}".format(self.n))
+            if self.cut is not None:
+                conditions.append("cut: {}".format(self.cut))
+            return ' '.join(conditions)
+
     def __init__(self):
         self.interactions = dict()
 
-    def add_interaction(self, inter):
-        self.interactions[inter.species_pair] = inter
+    def add_interaction(self, species_pair, inter):
+        self.interactions[species_pair] = inter
 
-    def to_dict(self):
+    def to_criteria(self):
         c = dict()
-        for interaction in self.interactions.itervalues():
-            criteria = interaction.to_dict()
+        for species_pair, crit in self.interactions.items():
+            criteria = self._prepend_keys(crit.to_criteria(), species_pair)
             if criteria is not None:
                 c.update(criteria)
 
         return c
+
+    def _prepend_keys(self, criteria, pre):
+        crit = dict()
+        for key, value in criteria.iteritems():
+            crit["{}.{}".format(pre, key)] = value
+        return crit
+

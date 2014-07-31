@@ -3,7 +3,6 @@ This module provides a QueryEngine that simplifies queries for Mongo databases
 generated using hive.
 """
 
-
 from __future__ import division
 
 __author__ = "Martin Uhrin"
@@ -13,11 +12,18 @@ __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "July 23, 2014"
 
+import itertools
 
 import matgendb as mgdb
+from matgendb.query_engine import QueryEngine
+from matgendb.query_engine import QueryListResults
+
+from pymatgen import Structure, Composition
+from pymatgen.entries.computed_entries import ComputedEntry, \
+    ComputedStructureEntry
 
 
-class LjQueryEngine(object):
+class LjQueryEngine(QueryEngine):
     """This class defines a QueryEngine interface to a Mongo Collection based on
     a set of aliases. This query engine also provides convenient translation
     between various pymatgen objects and database objects.
@@ -96,31 +102,19 @@ class LjQueryEngine(object):
                 properties are given to the 'properties' argument of
                 query().
         """
-        self._query = mgdb.QueryEngine(host, port, database, user, password,
+        super(LjQueryEngine, self).__init__(host, port, database, user, password,
                                        collection, aliases_config,
                                        default_properties, connection)
+        #self.params = super(LjQueryEngine, self).db["params"]
+        self.params = self.db["params"]
 
-    def set_collection(self, collection):
+    def get_entries(self, criteria, inc_structure=False, optional_data=None):
         """
-        Switch to another collection. Note that you may have to set the
-        aliases and default properties via set_aliases_and_defaults if the
-        schema of the new collection differs from the current collection.
+        Get ComputedEntries satisfying a particular criteria.
 
         Args:
-            collection:
-                Name of collection.
-        """
-        self._query.set_collection(collection)
-
-    def get_entries_in_system(self, species, inc_structure=False,
-                              optional_data=None, additional_criteria=None):
-        """
-        Gets all entries in a chemical system, e.g. A-B-C will return all
-        A-B, B-C, A-C, A-B-C compounds.
-
-        Args:
-            elements:
-                Sequence of species symbols, e.g. ['A','B','C']
+            criteria:
+                Criteria obeying the same syntax as query.
             inc_structure:
                 Optional parameter as to whether to include a structure with
                 the ComputedEntry. Defaults to False. Use with care - including
@@ -129,20 +123,59 @@ class LjQueryEngine(object):
             optional_data:
                 Optional data to include with the entry. This allows the data
                 to be access via entry.data[key].
-            additional_criteria:
-                Added ability to provide additional criteria other than just
-                the chemical system.
 
         Returns:
-            List of ComputedEntries in the chemical system.
+            List of pymatgen.entries.ComputedEntries satisfying criteria.
         """
-        chemsys_list = []
-        for i in range(len(species)):
-            for combi in itertools.combinations(species, i + 1):
-                chemsys = "-".join(sorted(combi))
-                chemsys_list.append(chemsys)
-        crit = {"chemsys": {"$in": chemsys_list}}
-        if additional_criteria is not None:
-            crit.update(additional_criteria)
-        return self.get_entries(crit, inc_structure,
-                                optional_data=optional_data)
+        all_entries = list()
+        optional_data = [] if not optional_data else list(optional_data)
+        fields = [k for k in optional_data]
+        fields.extend(["_id", "unit_cell_formula", "energy"])
+        for c in super(LjQueryEngine, self).query(fields, criteria):
+            optional_data = {k: c[k] for k in optional_data}
+            if inc_structure:
+                struct = Structure.from_dict(c["structure"])
+                entry = ComputedStructureEntry(struct, c["energy"],
+                                               data=optional_data,
+                                               entry_id=c["_id"])
+            else:
+                entry = ComputedEntry(Composition(c["unit_cell_formula"]),
+                                      c["energy"], data=optional_data,
+                                      entry_id=c["_id"])
+            all_entries.append(entry)
+
+        return all_entries
+
+    def get_param_ids(self, crit, properties=None):
+        cur = self.params.find(crit, fields=properties)
+        return mgdb.query_engine.QueryListResults(None, cur)
+
+    def get_param_id_criteria(self, params_range):
+        # Add the set of parameter ids to look for
+        criteria = dict()
+        param_ids = self.get_param_ids(params_range.to_criteria())
+
+        # TODO: Put in special case for just 1 parameter
+        criteria["potential.params_id"] =\
+            {"$in": [k["_id"] for k in param_ids]}
+
+        return criteria
+
+    def query_in_params_range(self, params_range, properties=None, criteria=None):
+        if criteria is None:
+            criteria = dict()
+
+        # Add the set of parameter ids to look for
+        criteria.update(self.get_param_id_criteria(params_range))
+
+        return super(LjQueryEngine, self).query(properties, criteria)
+
+    def query_at_each_param_point(self, params_range, properties=None, criteria=None):
+
+        points = list()
+        for value in self.get_param_ids(params_range.to_criteria()):
+            crit = criteria if criteria is not None else dict()
+            crit["potential.params_id"] = value["_id"]
+            points.append((value["_id"], super(LjQueryEngine, self).query(properties, crit)))
+
+        return points
