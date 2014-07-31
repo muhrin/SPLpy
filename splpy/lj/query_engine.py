@@ -7,12 +7,11 @@ from __future__ import division
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2014"
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "July 23, 2014"
 
-import itertools
 
 import matgendb as mgdb
 from matgendb.query_engine import QueryEngine
@@ -105,7 +104,6 @@ class LjQueryEngine(QueryEngine):
         super(LjQueryEngine, self).__init__(host, port, database, user, password,
                                        collection, aliases_config,
                                        default_properties, connection)
-        #self.params = super(LjQueryEngine, self).db["params"]
         self.params = self.db["params"]
 
     def get_entries(self, criteria, inc_structure=False, optional_data=None):

@@ -8,7 +8,7 @@ from __future__ import division
 
 __author__ = "Martin Uhrin, Georg Schusteritsch"
 __copyright__ = "Copyright 2014, Martin Uhrin"
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "Feb 14, 2014"
@@ -191,15 +191,15 @@ class Res(MSONable):
         lines.append('LATT -1')
 
         # Atoms
-        species_types = self.structure_.types_of_specie
-        species = ' '.join(map(str, species_types))
-        lines.append("SFAC " + species)
+        species_types = self.structure_.symbol_set
+        lines.append("SFAC " + ' '.join(map(str, species_types)))
 
         fmtstr = "{{}} {{}} {{:.{0}f}} {{:.{0}f}} {{:.{0}f}} 1.0".format(significant_figures)
         for site in self.structure_:
+            symbol = site.specie.symbol
             coords = site.frac_coords
             lines.append(
-                fmtstr.format(site.specie, species_types.index(site.specie) + 1, coords[0], coords[1],
+                fmtstr.format(symbol, species_types.index(symbol) + 1, coords[0], coords[1],
                               coords[2]))
         lines.append('END')
 
@@ -223,7 +223,7 @@ class Res(MSONable):
     def to_dict(self):
         return {"@module": self.__class__.__module__,
                 "@class": self.__class__.__name__,
-                "structure": self.structure_.to_criteria,
+                "structure": self.structure_.to_dict,
                 "name": self.name,
                 "pressure": self.pressure,
                 "energy": self.energy,
