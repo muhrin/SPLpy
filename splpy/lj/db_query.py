@@ -10,6 +10,7 @@ __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "Jul 16, 2014"
 
+from abc import ABCMeta, abstractmethod
 import re
 
 
@@ -188,80 +189,81 @@ class OrderedPair(object):
             return cmp(self.second, other.second)
 
 
+class InteractionRange(object):
+    """
+    Object for representing a range of parameters in the Lennard Jones
+    parameter space.  Each of the parameters can either be:
+    HalfOpenInterval    - match parameter values in this interval
+    None                - this parameter can take any value
+    (string convertible)- match exactly this value
+    """
+
+    def __init__(self, epsilon=None, sigma=None, m=12, n=6, cut=2.5):
+        self.epsilon = epsilon
+        self.sigma = sigma
+        self.m = m
+        self.n = n
+        self.cut = cut
+
+    def to_criteria(self):
+        criteria = dict()
+
+        # Epsilon
+        condition = self._param_to_condition(self.epsilon)
+        if condition is not None:
+            criteria["epsilon"] = condition
+
+        # Sigma
+        condition = self._param_to_condition(self.sigma)
+        if condition is not None:
+            criteria["sigma"] = condition
+
+        # M
+        condition = self._param_to_condition(self.m)
+        if condition is not None:
+            criteria["m"] = condition
+
+        # N
+        condition = self._param_to_condition(self.n)
+        if condition is not None:
+            criteria["n"] = condition
+
+        # Cut
+        condition = self._param_to_condition(self.cut)
+        if condition is not None:
+            criteria["cut"] = condition
+
+        return criteria
+
+    def _param_to_condition(self, param):
+        if param is None:
+            return None
+        elif isinstance(param, HalfOpenInterval):
+            return {"$gte": param.start, "$lt": param.end}
+        else:
+            return param
+
+    def __str__(self):
+        conditions = list()
+        if self.epsilon is not None:
+            conditions.append("epsilon: {}".format(self.epsilon))
+        if self.sigma is not None:
+            conditions.append("sigma: {}".format(self.sigma))
+        if self.m is not None:
+            conditions.append("m: {}".format(self.m))
+        if self.n is not None:
+            conditions.append("n: {}".format(self.n))
+        if self.cut is not None:
+            conditions.append("cut: {}".format(self.cut))
+        return ' '.join(conditions)
+
 class LennardJonesSearchRange(object):
-    class InteractionRange(object):
-        """
-        Object for representing a range of parameters in the Lennard Jones
-        parameter space.  Each of the parameters can either be:
-        HalfOpenInterval    - match parameter values in this interval
-        None                - this parameter can take any value
-        (string convertible)- match exactly this value
-        """
-
-        def __init__(self, epsilon=None, sigma=None, m=12, n=6, cut=2.5):
-            self.epsilon = epsilon
-            self.sigma = sigma
-            self.m = m
-            self.n = n
-            self.cut = cut
-
-        def to_criteria(self):
-            criteria = dict()
-
-            # Epsilon
-            condition = self._param_to_condition(self.epsilon)
-            if condition is not None:
-                criteria["epsilon"] = condition
-
-            # Sigma
-            condition = self._param_to_condition(self.sigma)
-            if condition is not None:
-                criteria["sigma"] = condition
-
-            # M
-            condition = self._param_to_condition(self.m)
-            if condition is not None:
-                criteria["m"] = condition
-
-            # N
-            condition = self._param_to_condition(self.n)
-            if condition is not None:
-                criteria["n"] = condition
-
-            # Cut
-            condition = self._param_to_condition(self.cut)
-            if condition is not None:
-                criteria["cut"] = condition
-
-            return criteria
-
-        def _param_to_condition(self, param):
-            if param is None:
-                return None
-            elif isinstance(param, HalfOpenInterval):
-                return {"$gte": param.start, "$lt": param.end}
-            else:
-                return param
-
-        def __str__(self):
-            conditions = list()
-            if self.epsilon is not None:
-                conditions.append("epsilon: {}".format(self.epsilon))
-            if self.sigma is not None:
-                conditions.append("sigma: {}".format(self.sigma))
-            if self.m is not None:
-                conditions.append("m: {}".format(self.m))
-            if self.n is not None:
-                conditions.append("n: {}".format(self.n))
-            if self.cut is not None:
-                conditions.append("cut: {}".format(self.cut))
-            return ' '.join(conditions)
 
     def __init__(self):
         self.interactions = dict()
 
-    def add_interaction(self, species_pair, inter):
-        self.interactions[species_pair] = inter
+    def add_interaction(self, species1, species2, inter):
+        self.interactions[self.InteractionRange(species1, species2)] = inter
 
     def to_criteria(self):
         c = dict()
@@ -278,3 +280,21 @@ class LennardJonesSearchRange(object):
             crit["{}.{}".format(pre, key)] = value
         return crit
 
+def visit_distinct_formulae(query_engine, criteria, callback):
+    cur = query_engine.query(properties=["pretty_formula"], criteria=criteria)
+    formulas = cur.distinct("pretty_formula")
+    cur.close()
+    for formula in formulas:
+        crit = dict(criteria)
+        crit["pretty_formula"] = formula
+        callback(crit)
+
+class VisitParamPoints(object):
+    def __init__(self, params_range):
+        self._params_criteria = params_range.to_criteria()
+
+    def __call__(self, query_engine, criteria, callback):
+        for id in query_engine.get_param_ids(self._params_criteria):
+            crit = dict(criteria)
+            crit["potential.params_id"] = id
+            callback(crit)

@@ -333,11 +333,13 @@ class LjToDbTaskDrone(AbstractDrone):
             coll = db[self.collection]
 
             if self.update_duplicates is None:
-                # Must be none, just insert
+                # Just insert - this is much faster
                 d = self._generate_doc(resfile, params_info.params)
                 d["_id"] = ObjectId()
                 d["potential"]["params_id"] = params_info.fetch_id()
                 coll.insert(d)
+                logger.info("Inserted {} with _id = {}".format(d["file_name"], d["_id"]))
+                return d["_id"]
             else:
                 # WARNING: The version of the insert below is NOT atomic
                 result = coll.find_one({"file_name": uri}, fields=["_id"])
@@ -357,6 +359,7 @@ class LjToDbTaskDrone(AbstractDrone):
                         d.update(result)
 
                     logger.info("Inserted {} with _id = {}".format(d["file_name"], d["_id"]))
+                    return d["_id"]
 
         else:
             logger.info("Simulated insert into database for {}".format(uri))

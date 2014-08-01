@@ -144,9 +144,11 @@ class LjQueryEngine(QueryEngine):
 
         return all_entries
 
-    def get_param_ids(self, crit, properties=None):
-        cur = self.params.find(crit, fields=properties)
-        return mgdb.query_engine.QueryListResults(None, cur)
+    def get_param_ids(self, crit=None):
+        if crit is None:
+            crit = dict()
+        cur = self.params.find(crit, fields={"_id": 1})
+        return [doc["_id"] for doc in cur]
 
     def get_param_id_criteria(self, params_range):
         # Add the set of parameter ids to look for
@@ -171,9 +173,9 @@ class LjQueryEngine(QueryEngine):
     def query_at_each_param_point(self, params_range, properties=None, criteria=None):
 
         points = list()
-        for value in self.get_param_ids(params_range.to_criteria()):
+        for id in self.get_param_ids(params_range.to_criteria()):
             crit = criteria if criteria is not None else dict()
-            crit["potential.params_id"] = value["_id"]
-            points.append((value["_id"], super(LjQueryEngine, self).query(properties, crit)))
+            crit["potential.params_id"] = id
+            points.append((id, super(LjQueryEngine, self).query(properties, crit)))
 
         return points
