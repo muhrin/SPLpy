@@ -263,7 +263,7 @@ class LennardJonesSearchRange(object):
         self.interactions = dict()
 
     def add_interaction(self, species1, species2, inter):
-        self.interactions[self.InteractionRange(species1, species2)] = inter
+        self.interactions[OrderedPair(species1, species2)] = inter
 
     def to_criteria(self):
         c = dict()
