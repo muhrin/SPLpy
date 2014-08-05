@@ -10,7 +10,7 @@ __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "Jul 16, 2014"
 
-from abc import ABCMeta, abstractmethod
+import copy
 import re
 
 
@@ -59,14 +59,13 @@ class HalfOpenInterval(object):
     end = property(fget=lambda self: self._end, doc="The interval's end")
 
     @classmethod
-    def from_string(cls, str):
-        inter_patt = re.compile("\[([0-9\-\.]+)\s*,\s*([0-9\-\.]+)\)")
-        match = inter_patt.match(str)
+    def from_string(cls, s):
+        inter_patt = re.compile("\[(.+)\s*,\s*(.+)\)")
+        match = inter_patt.match(s)
         if not match:
-            return None
+            raise ValueError("Interval string {} is not in format: [start, end)".format(s))
 
         return HalfOpenInterval(float(match.group(1)), float(match.group(2)))
-
 
     def __str__(self):
         """As string."""
@@ -150,7 +149,6 @@ class OrderedPair(object):
     accessed in order using the .first and .second attributes
 
     """
-
     def __init__(self, x0=None, x1=None):
         self._first = None
         self._second = None
@@ -188,6 +186,12 @@ class OrderedPair(object):
         else:
             return cmp(self.second, other.second)
 
+    @classmethod
+    def from_string(cls, s):
+        values = s.split("~")
+        if len(values) != 2:
+            raise ValueError("OrderedPair expects format A~B")
+        return OrderedPair(values[0], values[1])
 
 class InteractionRange(object):
     """
@@ -243,6 +247,18 @@ class InteractionRange(object):
         else:
             return param
 
+    @classmethod
+    def from_dict(cls, d):
+        parsed = dict()
+        for val in ["epsilon", "sigma", "m", "n", "cut"]:
+            if val in d:
+                try:
+                    parsed[val] = HalfOpenInterval.from_string(d[val])
+                except (ValueError, TypeError):
+                    parsed[val] = d[val]
+
+        return InteractionRange(**parsed)
+
     def __str__(self):
         conditions = list()
         if self.epsilon is not None:
@@ -262,6 +278,10 @@ class LennardJonesSearchRange(object):
     def __init__(self):
         self.interactions = dict()
 
+    def __str__(self):
+        inters = ["{}: {{{}}}".format(pair, inter) for pair, inter in self.interactions.iteritems()]
+        return ', '.join(inters)
+
     def add_interaction(self, species1, species2, inter):
         self.interactions[OrderedPair(species1, species2)] = inter
 
@@ -280,6 +300,48 @@ class LennardJonesSearchRange(object):
             crit["{}.{}".format(pre, key)] = value
         return crit
 
+    @property
+    def num_interactions(self):
+        return len(self.interactions)
+
+    @classmethod
+    def from_dict(cls, d):
+        r = LennardJonesSearchRange()
+        for pair, inter in d.iteritems():
+            species = OrderedPair.from_string(pair)
+            r.add_interaction(species.first, species.second, InteractionRange.from_dict(inter))
+        return r
+
+class VisitationEngine(object):
+    class RunInstance:
+        def __init__(self, visitor, properties=None):
+            self.visitor = visitor
+            self.stack_idx = 0
+            self.properties = properties
+
+    def __init__(self, query_engine):
+        self._query_engine = query_engine
+        self._generators = []
+        self._run = None
+
+    def add(self, generator):
+        self._generators.append(generator)
+
+    def run_queries(self, visitor, properties=None, criteria=None):
+        self._run = self.RunInstance(visitor, properties)
+        # Set the initial criteria that applies to all
+        crit = criteria if criteria is not None else dict()
+        self.callback(crit)
+        self._run = None
+
+    def callback(self, criteria):
+        if self._run.stack_idx < len(self._generators):
+            self._run.stack_idx += 1
+            self._generators[self._run.stack_idx - 1](self._query_engine, criteria, self.callback)
+            self._run.stack_idx -= 1
+        else:
+            self._run.visitor(self._query_engine.query(self._run.properties, criteria))
+
 def visit_distinct_formulae(query_engine, criteria, callback):
     cur = query_engine.query(properties=["pretty_formula"], criteria=criteria)
     formulas = cur.distinct("pretty_formula")
@@ -289,12 +351,21 @@ def visit_distinct_formulae(query_engine, criteria, callback):
         crit["pretty_formula"] = formula
         callback(crit)
 
+def visit_distinct_spacegroups(query_engine, criteria, callback):
+    cur = query_engine.query(properties=["spacegroup.number"], criteria=criteria)
+    spacegroups = cur.distinct("spacegroup.number")
+    cur.close()
+    for sg in spacegroups:
+        crit = dict(criteria)
+        crit["spacegroup.number"] = sg
+        callback(crit)
+
 class VisitParamPoints(object):
     def __init__(self, params_range):
         self._params_criteria = params_range.to_criteria()
 
     def __call__(self, query_engine, criteria, callback):
         for id in query_engine.get_param_ids(self._params_criteria):
-            crit = dict(criteria)
+            crit = copy.deepcopy(criteria) if criteria is not None else dict()
             crit["potential.params_id"] = id
             callback(crit)

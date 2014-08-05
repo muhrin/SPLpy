@@ -12,7 +12,6 @@ __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "July 23, 2014"
 
-
 import matgendb as mgdb
 from matgendb.query_engine import QueryEngine
 from matgendb.query_engine import QueryListResults
@@ -20,6 +19,8 @@ from matgendb.query_engine import QueryListResults
 from pymatgen import Structure, Composition
 from pymatgen.entries.computed_entries import ComputedEntry, \
     ComputedStructureEntry
+
+import splpy.lj.db_query
 
 
 class LjQueryEngine(QueryEngine):
@@ -102,8 +103,11 @@ class LjQueryEngine(QueryEngine):
                 query().
         """
         super(LjQueryEngine, self).__init__(host, port, database, user, password,
-                                       collection, aliases_config,
-                                       default_properties, connection)
+                                            collection,
+                                            aliases_config if aliases_config is not None
+                                            else {"aliases": {}, "defaults": {}},
+                                            default_properties,
+                                            connection)
         self.params = self.db["params"]
 
     def get_entries(self, criteria, inc_structure=False, optional_data=None):
@@ -144,6 +148,17 @@ class LjQueryEngine(QueryEngine):
 
         return all_entries
 
+    def _parse_criteria(self, criteria):
+        parsed_crit = dict()
+        try:
+            potparams = criteria.pop("potential.params")
+            params_range = splpy.lj.db_query.LennardJonesSearchRange.from_dict(potparams)
+            parsed_crit.update(self.get_param_id_criteria(params_range))
+        except KeyError:
+            pass
+        parsed_crit.update(super(LjQueryEngine, self)._parse_criteria(criteria))
+        return parsed_crit
+
     def get_param_ids(self, crit=None):
         if crit is None:
             crit = dict()
@@ -156,8 +171,7 @@ class LjQueryEngine(QueryEngine):
         param_ids = self.get_param_ids(params_range.to_criteria())
 
         # TODO: Put in special case for just 1 parameter
-        criteria["potential.params_id"] =\
-            {"$in": [k["_id"] for k in param_ids]}
+        criteria["potential.params_id"] = {"$in": param_ids}
 
         return criteria
 

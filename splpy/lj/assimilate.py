@@ -7,11 +7,12 @@ and insert it into a Mongo database.
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2014"
-__version__ = "0.0.2"
+__version__ = "0.0.4"
 __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "May 27, 2014"
 
+import copy
 import datetime
 import glob
 import logging
@@ -163,7 +164,7 @@ class LjToDbTaskDrone(AbstractDrone):
     def __init__(self, host="127.0.0.1", port=27017, database="lj",
                  user=None, password=None, collection="structures",
                  tags=None, simulate_mode=False, additional_fields=None,
-                 update_duplicates=True, use_full_uri=True):
+                 update_duplicates=False, force_insert=False, use_full_uri=True):
         """
         Args:
             host:
@@ -190,9 +191,15 @@ class LjToDbTaskDrone(AbstractDrone):
                 Dict specifying additional fields to append to each doc
                 inserted into the collection. For example, allows one to add
                 an author or tags to a whole set of runs for example.
+            force_insert:
+                If True, checking for updates is disabled.  This is much faster
+                because the database doesn't need to be searched for each structure
+                but can lead to duplicate entries.  When True update_duplicates
+                is not used.
             update_duplicates:
                 If True, if a duplicate path exists in the collection, the
                 entire doc is updated. Else, duplicates are skipped.
+                WARNING: Only works if force_insert is False
             use_full_uri:
                 Whether to use full uri path (including hostname) for the
                 directory name. Defaults to True. If False, only the abs
@@ -209,6 +216,12 @@ class LjToDbTaskDrone(AbstractDrone):
         self.additional_fields = {} if not additional_fields \
             else additional_fields
         self.update_duplicates = update_duplicates
+        if force_insert and update_duplicates:
+            self.force_insert = False
+            logger.warn("Both force_insert and update_duplicates specified!  Disabling force_insert.")
+        else:
+            self.force_insert = force_insert
+
         self.use_full_uri = use_full_uri
         if not simulate_mode:
             conn = MongoClient(self.host, self.port, j=True)
@@ -240,16 +253,16 @@ class LjToDbTaskDrone(AbstractDrone):
         try:
             params_entry = potparams.params.get(os.path.relpath(abs_path, parent))
             if params_entry is not None:
-                params = get_lj_interactions(params_entry)
-                params_info = LjToDbTaskDrone.ParamsInfo(db["params"], params)
+                params_info = LjToDbTaskDrone.ParamsInfo(db["params"], get_lj_interactions(params_entry))
                 for resfile in glob.glob(os.path.join(abs_path, "*.res")):
                     tid = self._assimilate_resfile(resfile, params_info, db)
                     if tid is not None:
                         # Need to convert the ObjectId to string as returned
                         # list has to contain only MSONAble types
-                        tids.append(str(tid))
+                        tids.append(tid)
+                logger.info("Inserted {} structures from {}".format(len(tids), abs_path))
 
-            return tids
+            return str(params_info.fetch_id()) if params_info else None
         except Exception as ex:
             import traceback
 
@@ -263,7 +276,12 @@ class LjToDbTaskDrone(AbstractDrone):
         Read the resfile and populate with the information we want to store in
         the db.
         """
-        d = self.process_res(resfile)
+        #Defensively copy the additional fields first.  This is a MUST.
+        #Otherwise, parallel updates will see the same object and inserts
+        #will be overridden!!
+        d = copy.copy(self.additional_fields) if self.additional_fields else {}
+
+        d.update(self.process_res(resfile))
 
         d["potential"] = {"name": "lennard_jones", "params": params}
         d["last_updated"] = datetime.datetime.today()
@@ -317,8 +335,6 @@ class LjToDbTaskDrone(AbstractDrone):
         if use_full_uri:
             d["file_name"] = get_uri(resfile)
 
-        logger.info("Post-processed " + fullpath)
-
     @classmethod
     def length_per_site(cls, structure):
         return (structure.volume / structure.num_sites) ** 0.5
@@ -332,23 +348,23 @@ class LjToDbTaskDrone(AbstractDrone):
         if not self.simulate:
             coll = db[self.collection]
 
-            if self.update_duplicates is None:
+            if self.force_insert:
                 # Just insert - this is much faster
                 d = self._generate_doc(resfile, params_info.params)
                 d["_id"] = ObjectId()
                 d["potential"]["params_id"] = params_info.fetch_id()
                 coll.insert(d)
-                logger.info("Inserted {} with _id = {}".format(d["file_name"], d["_id"]))
+                logger.debug("Inserted {} with _id = {}".format(d["file_name"], d["_id"]))
                 return d["_id"]
             else:
                 # WARNING: The version of the insert below is NOT atomic
                 result = coll.find_one({"file_name": uri}, fields=["_id"])
 
                 if result is not None and not self.update_duplicates:
-                    logger.info("Skipping duplicate {} with id {}".format(uri, result["_id"]))
+                    logger.debug("Skipping duplicate {} with id {}".format(uri, result["_id"]))
                 else:
                     # Need to either update or insert
-                    d = self._generate_doc(resfile, params)
+                    d = self._generate_doc(resfile, params_info.params)
                     d["potential"]["params_id"] = params_info.fetch_id()
                     if result is None:
                         d["_id"] = ObjectId()
@@ -358,11 +374,11 @@ class LjToDbTaskDrone(AbstractDrone):
                         # Make sure this comes after update or it will fail!
                         d.update(result)
 
-                    logger.info("Inserted {} with _id = {}".format(d["file_name"], d["_id"]))
+                    logger.debug("Inserted {} with _id = {}".format(d["file_name"], d["_id"]))
                     return d["_id"]
 
         else:
-            logger.info("Simulated insert into database for {}".format(uri))
+            logger.debug("Simulated insert into database for {}".format(uri))
             return self._generate_doc(resfile, params_info.params)
 
 
