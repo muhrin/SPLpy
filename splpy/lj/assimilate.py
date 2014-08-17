@@ -29,6 +29,7 @@ from pymatgen.symmetry.finder import SymmetryFinder
 
 from splpy.resio import Res
 import splpy.util as util
+from splpy.lj.util import LjInteraction
 
 logger = logging.getLogger(__name__)
 
@@ -98,37 +99,6 @@ class Potparams(object):
                         num_params = int(tok[2:]) + 1
 
         return Potparams(params)
-
-
-class LjInteraction(object):
-    """
-    LjParams represents a set of Lennard-Jones potential parameters
-    """
-
-    def __init__(self, epsilon, sigma, m, n, cut):
-        self.epsilon = epsilon
-        self.sigma = sigma
-        self.m = m
-        self.n = n
-        self.cut = cut
-
-    @staticmethod
-    def from_array(params):
-        assert len(params) == 5
-
-        return LjInteraction(float(params[0]), float(params[1]),
-                             float(params[2]), float(params[3]),
-                             float(params[4]))
-
-    @property
-    def to_dict(self):
-        return {"@module": self.__class__.__module__,
-                "@class": self.__class__.__name__,
-                "epsilon": self.epsilon,
-                "sigma": self.sigma,
-                "m": self.m,
-                "n": self.n,
-                "cut": self.cut}
 
 
 class LjToDbTaskDrone(AbstractDrone):

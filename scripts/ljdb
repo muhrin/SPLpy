@@ -33,6 +33,7 @@ import pymatgen.analysis.structure_matcher as structure_matcher
 import splpy.lj as lj
 import splpy.lj.util
 import splpy.resio
+import splpy.interval
 from splpy.lj.assimilate import LjToDbTaskDrone
 from splpy.lj.query_engine import LjQueryEngine
 from splpy.lj.db_query import VisitationEngine
@@ -112,9 +113,9 @@ def query_db(args):
         t = PrettyTable(props)
         t.float_format = "4.4"
         cur = qe.query(properties=props, criteria=criteria)
-        if args.sort is not None and len(args.sort) > 0:
+        if args.sort and len(args.sort) > 0:
             cur.sort(parse_sort_tokens(args.sort))
-        if args.limit is not None:
+        if args.limit:
             cur.limit(args.limit)
         for r in cur:
             t.add_row([r[p] for p in props])
@@ -185,12 +186,11 @@ def get_unique_from_db(args):
     properties = ["_id", "name", "times_found", "energy", "spacegroup.symbol", "spacegroup.number", "pressure",
                   "structure", "pretty_formula"]
 
-    criteria = json.loads(args.criteria)
+    criteria = json.loads(args.criteria) if args.criteria else dict()
     ve = VisitationEngine(qe)
     params_range = lj.db_query.LennardJonesSearchRange()
-    if criteria is not None:
-        if "potential.params" in criteria:
-            params_range = lj.db_query.LennardJonesSearchRange.from_dict(criteria.pop("potential.params"))
+    if "potential.params" in criteria:
+        params_range = lj.db_query.LennardJonesSearchRange.from_dict(criteria.pop("potential.params"))
     ve.add(splpy.lj.db_query.VisitParamPoints(params_range))
     ve.add(splpy.lj.db_query.visit_distinct_formulae)
 
@@ -235,7 +235,8 @@ def map_from_db(args):
         def __call__(self, results):
             # This is a bid dodgy (using private function), but QueryResults can't handle
             # calling through to Cursor methods properly (and not loose its identity)
-            doc = results._mapped_result(results.sort('energy', pymongo.ASCENDING)[0])
+            #doc = results._mapped_result(results.sort('energy', pymongo.ASCENDING)[0])
+            doc = results._mapped_result(results.sort('energy', pymongo.ASCENDING).limit(1)[0])
             formula = doc["pretty_formula"]
 
             formula_dict = self.lowest.get(formula)
@@ -247,7 +248,7 @@ def map_from_db(args):
 
     criteria = json.loads(args.criteria)
 
-    # Find out which two parameters the user want to form the map from
+    # Find out which two parameters the user want to create the map from
     params_range = lj.db_query.LennardJonesSearchRange()
     if criteria is not None:
         if "potential.params" in criteria:
@@ -256,7 +257,7 @@ def map_from_db(args):
     map_params = list()
     for pair, interaction in params_range.interactions.iteritems():
         for param, value in interaction.__dict__.iteritems():
-            if isinstance(value, lj.db_query.HalfOpenInterval):
+            if isinstance(value, splpy.interval.Interval):
                 map_params.append("potential.params.{}.{}".format(pair, param))
 
     if len(map_params) != 2:
@@ -436,7 +437,7 @@ if __name__ == "__main__":
     pmap = subparsers.add_parser("map",
                                  help="Create structure map using smap.",
                                  parents=[parent_vb, parent_cfg])
-    pmap.add_argument("--crit", dest="criteria", type=str, default=None,
+    pmap.add_argument("--crit", dest="criteria", type=str, default=None, required=True,
                       help="Query criteria in typical json format. E.g., "
                            "{\"potential.params\": {\"A~B\": {\"sigma\": 1.5}}}.")
     pmap.add_argument("--prop", dest="property", type=str, default="spacegroup.number",
