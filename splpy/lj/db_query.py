@@ -16,7 +16,6 @@ import copy
 import pymongo
 
 import pymatgen as mg
-import pymatgen.analysis.structure_matcher as structure_matcher
 
 import matgendb as mgdb
 
@@ -208,11 +207,11 @@ class VisitParamPoints(object):
 
     def __call__(self, query_engine, criteria, callback):
         for id in query_engine.get_param_ids(self._params_criteria):
-            crit = copy.deepcopy(criteria) if criteria is not None else dict()
+            crit = copy.deepcopy(criteria) if criteria else dict()
             crit["potential.params_id"] = id
             callback(crit)
 
-def get_unique_in_range(query_engine, range, criteria=None, limit=None, save_doc=True):
+def get_unique_in_range(query_engine, range, matcher, criteria=None, limit=None, save_doc=True):
     class LowestEnergyStore:
         def __init__(self, lowest, limit):
             self.lowest = lowest
@@ -249,8 +248,6 @@ def get_unique_in_range(query_engine, range, criteria=None, limit=None, save_doc
     lowest = dict()
     getter = LowestEnergyStore(lowest, limit)
     ve.run_queries(getter, properties=properties, criteria=crit)
-
-    matcher = structure_matcher.StructureMatcher()
 
     unique = list()
     while len(lowest) > 0:

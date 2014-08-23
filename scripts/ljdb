@@ -6,7 +6,7 @@ A helper script for interacting with a Lennard-Jones database
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2014, Martin Uhrin"
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "Aug 2, 2014"
@@ -59,7 +59,7 @@ def update_db(args):
     FORMAT = "%(relativeCreated)d msecs : %(message)s"
 
     if args.logfile:
-        logging.basicConfig(level=logging.INFO, format=FORMAT, filename=args.logfile[0])
+        logging.basicConfig(level=logging.INFO, format=FORMAT, filename=args.logfile)
     else:
         logging.basicConfig(level=logging.INFO, format=FORMAT)
 

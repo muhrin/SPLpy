@@ -68,7 +68,7 @@ class Interval(object):
 
 class Closed(Interval):
     """
-    Represents a half-open interval [start,end).
+    Represents a closed interval [start,end].
     Start and end do not have to be numeric types.
     """
 
@@ -77,7 +77,7 @@ class Closed(Interval):
 
     @classmethod
     def from_string(cls, s):
-        inter_patt = re.compile("\((.+)\s*,\s*(.+)\)")
+        inter_patt = re.compile("\[(.+)\s*,\s*(.+)\]")
         match = inter_patt.match(s)
         if not match:
             raise ValueError("Interval string {} is not in format: (start, end)".format(s))
@@ -94,11 +94,11 @@ class Closed(Interval):
 
     def __str__(self):
         """As string."""
-        return '(%s,%s)' % (self.start, self.end)
+        return '[%s,%s]' % (self.start, self.end)
 
     def __repr__(self):
         """String representation."""
-        return '(%s,%s)' % (self.start, self.end)
+        return '[%s,%s]' % (self.start, self.end)
 
     def __cmp__(self, other):
         """Compare."""
@@ -112,7 +112,7 @@ class Closed(Interval):
 
     def __hash__(self):
         """Hash."""
-        return hash("(") ^ hash(self.start) ^ hash(self.end) ^ hash(")")
+        return hash("[") ^ hash(self.start) ^ hash(self.end) ^ hash("]")
 
 class LeftClosedRightOpen(Interval):
     """

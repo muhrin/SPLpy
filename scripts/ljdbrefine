@@ -19,6 +19,8 @@ import yaml
 import matgendb as mgdb
 import matgendb.util
 
+import pymatgen.analysis.structure_matcher as structure_matcher
+
 import splpy.lj as lj
 import splpy.lj.db_query as db_query
 import splpy.lj.util
@@ -77,7 +79,7 @@ if __name__ == "__main__":
     parser.add_argument("--crit", dest="criteria", type=str, default=None,
                         help="Query criteria in typical json format. E.g., "
                              "{\"task_id\": 1}.")
-    parser.add_argument("-d", dest="dist", type=float, default=0.2,
+    parser.add_argument("-d", dest="dist", type=float, default=0.1,
                         help="Distance from each parameter point to get structures from.")
     parser.add_argument("spipe_file", metavar="spipe_file", type=str,
                         help="The spipe file to append to.")
@@ -101,10 +103,12 @@ if __name__ == "__main__":
     if "potential.params" in criteria:
         params_range = lj.db_query.LennardJonesSearchRange.from_dict(criteria.pop("potential.params"))
 
+    matcher = structure_matcher.StructureMatcher()
+
     for result in qe.params.find(params_range.to_criteria()):
         params = lj.util.LjInteractions.from_dict(result)
         range = surrounding_range(params, args.dist)
-        strs = db_query.get_unique_in_range(qe, range)
+        strs = db_query.get_unique_in_range(qe, range, matcher)
 
         params_id = str(result["_id"])
         try:

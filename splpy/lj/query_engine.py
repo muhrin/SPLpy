@@ -104,7 +104,7 @@ class LjQueryEngine(QueryEngine):
         """
         super(LjQueryEngine, self).__init__(host, port, database, user, password,
                                             collection,
-                                            aliases_config if aliases_config is not None
+                                            aliases_config if aliases_config
                                             else {"aliases": {}, "defaults": {}},
                                             default_properties,
                                             connection)
