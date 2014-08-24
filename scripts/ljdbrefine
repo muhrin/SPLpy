@@ -6,7 +6,7 @@ A script to create SPL runs to refine entries in the lj database
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2014, Martin Uhrin"
-__version__ = "0.0.0"
+__version__ = "0.1.0"
 __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "Aug 12, 2014"
@@ -81,6 +81,8 @@ if __name__ == "__main__":
                              "{\"task_id\": 1}.")
     parser.add_argument("-d", dest="dist", type=float, default=0.1,
                         help="Distance from each parameter point to get structures from.")
+    parser.add_argument("--limit", dest="limit", type=int, default=None,
+                        help="Limit the number of structures take from each parameter point.")
     parser.add_argument("spipe_file", metavar="spipe_file", type=str,
                         help="The spipe file to append to.")
 
@@ -105,10 +107,11 @@ if __name__ == "__main__":
 
     matcher = structure_matcher.StructureMatcher()
 
-    for result in qe.params.find(params_range.to_criteria()):
+    results = qe.params.find(params_range.to_criteria(), timeout=False)
+    for result in results:
         params = lj.util.LjInteractions.from_dict(result)
         range = surrounding_range(params, args.dist)
-        strs = db_query.get_unique_in_range(qe, range, matcher)
+        strs = db_query.get_unique_in_range(qe, range, matcher, limit=args.limit)
 
         params_id = str(result["_id"])
         try:
@@ -142,3 +145,5 @@ if __name__ == "__main__":
 
         except OSError:
             pass
+    # Need to close the results cursor because we disabled the timeout
+    results.close()

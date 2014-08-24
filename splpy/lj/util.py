@@ -94,7 +94,7 @@ class LjInteractions(MSONable):
     def to_dict(self):
         d = {"@module": self.__class__.__module__,
              "@class": self.__class__.__name__}
-        d.update({k: v.to_dict() for k, v in self._interactions.iteritems()})
+        d.update({k: v.to_dict for k, v in self._interactions.iteritems()})
         return d
 
     @property
