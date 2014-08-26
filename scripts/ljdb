@@ -6,7 +6,7 @@ A helper script for interacting with a Lennard-Jones database
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2014, Martin Uhrin"
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "Aug 2, 2014"
@@ -228,6 +228,29 @@ def get_unique_from_db(args):
 def map_from_db(args):
     from subprocess import call
 
+    def to_latex_string(interaction_string):
+        tokens = interaction_string.split('.')
+
+        n_toks = len(tokens)
+        if n_toks == 0:
+            return
+
+        latex = ["$"]
+        # Build up the string
+        if tokens[-1] in ["epsilon", "sigma"]:
+            latex.append("\{}".format(tokens[-1]))
+        elif tokens[-1] is "rcut":
+            latex.append("r_{cut}")
+        else:
+            latex.append(tokens[-1])
+
+        if n_toks > 1:
+            species_pair = splpy.util.OrderedPair.from_string(tokens[-2])
+            latex.append("_{{{}{}}}".format(species_pair.first, species_pair.second))
+
+        latex.append("$")
+        return ''.join(latex)
+
     class LowestEnergyStore:
         def __init__(self, lowest):
             self.lowest = lowest
@@ -235,16 +258,16 @@ def map_from_db(args):
         def __call__(self, results):
             # This is a bid dodgy (using private function), but QueryResults can't handle
             # calling through to Cursor methods properly (and not loose its identity)
-            #doc = results._mapped_result(results.sort('energy', pymongo.ASCENDING)[0])
-            doc = results._mapped_result(results.sort('energy', pymongo.ASCENDING).limit(1)[0])
-            formula = doc["pretty_formula"]
+            doc = results._mapped_result(results.sort('energy', pymongo.ASCENDING)[0])
+            form = doc["pretty_formula"]
 
-            formula_dict = self.lowest.get(formula)
+            formula_dict = self.lowest.get(form)
             if formula_dict is None:
                 formula_dict = dict()
-                self.lowest[formula] = formula_dict
+                self.lowest[form] = formula_dict
 
             formula_dict[doc["potential.params_id"]] = doc
+            results.close()
 
     criteria = json.loads(args.criteria)
 
@@ -274,12 +297,15 @@ def map_from_db(args):
 
     ve = VisitationEngine(qe)
     ve.add(splpy.lj.db_query.VisitParamPoints(params_range))
-    ve.add(splpy.lj.db_query.visit_distinct_formulae)
+    #ve.add(splpy.lj.db_query.visit_distinct_formulae)
 
     _log.info("Searching database for map(s) in range {}".format(str(params_range)))
     lowest = dict()
     getter = LowestEnergyStore(lowest)
     ve.run_queries(getter, properties=properties, criteria=criteria)
+
+    # Put in the axes labels
+    params = ["-x {}".format(to_latex_string(map_params[0])), "-y {}".format(to_latex_string(map_params[1]))]
 
     for formula, params_map in lowest.iteritems():
         filename = "{}.dat".format(formula)
@@ -288,7 +314,9 @@ def map_from_db(args):
         for doc in params_map.itervalues():
             f.write("{} {} {}\n".format(doc[map_params[0]], doc[map_params[1]], doc[args.property]))
         f.close()
-        call(["smap", filename])
+        args = ["smap", filename]
+        args.extend(params)
+        call(args)
 
 
 def init_logging(args):
