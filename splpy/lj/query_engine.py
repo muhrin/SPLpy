@@ -12,9 +12,7 @@ __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "July 23, 2014"
 
-import matgendb as mgdb
 from matgendb.query_engine import QueryEngine
-from matgendb.query_engine import QueryListResults
 
 from pymatgen import Structure, Composition
 from pymatgen.entries.computed_entries import ComputedEntry, \

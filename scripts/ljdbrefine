@@ -32,7 +32,7 @@ from splpy.lj.query_engine import LjQueryEngine
 def surrounding_range(params, dist):
     """
     Get the InteractionRange that surround this point in parameter space up to a distance dist
-    in each direction
+    in each parameter direction
     """
     range = db_query.LennardJonesSearchRange()
     for pair, val in params.interactions.iteritems():

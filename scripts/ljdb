@@ -6,7 +6,7 @@ A helper script for interacting with a Lennard-Jones database
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2014, Martin Uhrin"
-__version__ = "0.1.2"
+__version__ = "0.2.0"
 __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "Aug 2, 2014"
@@ -37,6 +37,7 @@ import splpy.interval
 from splpy.lj.assimilate import LjToDbTaskDrone
 from splpy.lj.query_engine import LjQueryEngine
 from splpy.lj.db_query import VisitationEngine
+import splpy.lj.db_crawl as db_crawl
 
 _log = logging.getLogger("lj")  # parent
 
@@ -83,6 +84,35 @@ def update_db(args):
     _log.info("{} parameter points inserted.".format(len(queen.get_data())))
 
 
+def crawl_db(args):
+    d = mgdb.util.get_settings(args.config_file)
+    qe = LjQueryEngine(host=d["host"], port=d["port"], database=d["database"],
+                       user=d["readonly_user"], password=d["readonly_password"],
+                       collection=d["collection"], aliases_config=d.get("aliases_config", None))
+    criteria = parse_criteria_or_die(args.criteria)
+
+    functions = list()
+    if args.prune:
+        functions.append(db_crawl.Prune())
+    # if args.refine:
+    #     functions.append(db_crawl.Refine(args.refine, args.refine_dist))
+
+    params_range = lj.db_query.LennardJonesSearchRange()
+    if criteria:
+        if "potential.params" in criteria:
+            params_range = lj.db_query.LennardJonesSearchRange.from_dict(criteria.pop("potential.params"))
+
+    params = db_crawl.get_next_param_to_crawl(qe, params_range)
+    while params:
+        _log.info("Crawling parameter point {}".format(params["_id"]))
+        # Call all the selected functions
+        for func in functions:
+            func(params, qe)
+
+        # Get the next one
+        params = db_crawl.get_next_param_to_crawl(qe, params_range)
+
+
 def query_db(args):
     from prettytable import PrettyTable
 
@@ -90,13 +120,7 @@ def query_db(args):
     qe = LjQueryEngine(host=d["host"], port=d["port"], database=d["database"],
                        user=d["readonly_user"], password=d["readonly_password"],
                        collection=d["collection"], aliases_config=d.get("aliases_config", None))
-    criteria = None
-    if args.criteria:
-        try:
-            criteria = json.loads(args.criteria)
-        except ValueError:
-            print("Criteria {} is not a valid JSON string!".format(args.criteria))
-            sys.exit(-1)
+    criteria = parse_criteria_or_die(args.criteria)
 
     # TODO: document this 'feature' --dang 4/4/2013
     is_a_file = lambda s: len(s) == 1 and s[0].startswith(':')
@@ -127,14 +151,8 @@ def get_from_db(args):
     qe = LjQueryEngine(host=d["host"], port=d["port"], database=d["database"],
                        user=d["readonly_user"], password=d["readonly_password"],
                        collection=d["collection"], aliases_config=d.get("aliases_config", None))
-    criteria = None
-    if args.criteria:
-        try:
-            criteria = json.loads(args.criteria)
-        except ValueError:
-            print("Criteria {} is not a valid JSON string!".format(args.criteria))
-            sys.exit(-1)
 
+    criteria = parse_criteria_or_die(args.criteria)
     properties = ["_id", "name", "times_found", "energy", "spacegroup.symbol", "pressure", "structure"]
 
     cur = qe.query(properties=properties, criteria=criteria)
@@ -186,7 +204,8 @@ def get_unique_from_db(args):
     properties = ["_id", "name", "times_found", "energy", "spacegroup.symbol", "spacegroup.number", "pressure",
                   "structure", "pretty_formula"]
 
-    criteria = json.loads(args.criteria) if args.criteria else dict()
+    criteria = parse_criteria_or_die(args.criteria)
+
     ve = VisitationEngine(qe)
     params_range = lj.db_query.LennardJonesSearchRange()
     if "potential.params" in criteria:
@@ -258,7 +277,7 @@ def map_from_db(args):
         def __call__(self, results):
             # This is a bid dodgy (using private function), but QueryResults can't handle
             # calling through to Cursor methods properly (and not loose its identity)
-            doc = results._mapped_result(results.sort('energy', pymongo.ASCENDING)[0])
+            doc = results._mapped_result(results.sort('energy', pymongo.ASCENDING).limit(1)[0])
             form = doc["pretty_formula"]
 
             formula_dict = self.lowest.get(form)
@@ -269,11 +288,11 @@ def map_from_db(args):
             formula_dict[doc["potential.params_id"]] = doc
             results.close()
 
-    criteria = json.loads(args.criteria)
+    criteria = parse_criteria_or_die(args.criteria)
 
     # Find out which two parameters the user want to create the map from
     params_range = lj.db_query.LennardJonesSearchRange()
-    if criteria is not None:
+    if criteria:
         if "potential.params" in criteria:
             params_range = lj.db_query.LennardJonesSearchRange.from_dict(criteria.pop("potential.params"))
 
@@ -296,10 +315,13 @@ def map_from_db(args):
     properties.extend(map_params)
 
     ve = VisitationEngine(qe)
-    ve.add(splpy.lj.db_query.VisitParamPoints(params_range))
-    #ve.add(splpy.lj.db_query.visit_distinct_formulae)
+    params_query = splpy.lj.db_query.VisitParamPoints(params_range)
+    ve.add(params_query)
+    ve.add(splpy.lj.db_query.visit_distinct_formulae)
 
-    _log.info("Searching database for map(s) in range {}".format(str(params_range)))
+    _log.info("Searching database for map(s) in range {} "
+              "containing {} parameter points".format(str(params_range),
+                                                      params_query.num_points(qe)))
     lowest = dict()
     getter = LowestEnergyStore(lowest)
     ve.run_queries(getter, properties=properties, criteria=criteria)
@@ -312,11 +334,21 @@ def map_from_db(args):
         _log.info("Creating map from data in {}".format(filename))
         f = open(filename, 'w')
         for doc in params_map.itervalues():
-            f.write("{} {} {}\n".format(doc[map_params[0]], doc[map_params[1]], doc[args.property]))
+            f.write("{},{},{}\n".format(doc[map_params[0]], doc[map_params[1]], doc[args.property]))
         f.close()
         args = ["smap", filename]
         args.extend(params)
         call(args)
+
+
+def tag_db(args):
+    d = mgdb.util.get_settings(args.config_file)
+    qe = LjQueryEngine(host=d["host"], port=d["port"], database=d["database"],
+                       user=d["readonly_user"], password=d["readonly_password"],
+                       collection=d["collection"], aliases_config=d.get("aliases_config", None))
+
+    criteria = parse_criteria_or_die(args.criteria)
+    qe.params.update(criteria, {"$addToSet": {"tags": args.tag}})
 
 
 def init_logging(args):
@@ -344,6 +376,17 @@ def parse_sort_tokens(tokens):
         else:
             parsed.append((token, pymongo.ASCENDING))
     return parsed
+
+
+def parse_criteria_or_die(crit):
+    criteria = None
+    if crit:
+        try:
+            criteria = json.loads(crit)
+        except ValueError:
+            print("Criteria {} is not a valid JSON string!".format(crit))
+            sys.exit(-1)
+    return criteria
 
 
 if __name__ == "__main__":
@@ -374,6 +417,23 @@ if __name__ == "__main__":
 
     # Init for all subparsers.
     subparsers = parser.add_subparsers()
+
+    # The 'crawl' subcommand.
+    pcrawl = subparsers.add_parser("crawl",
+                                   help="Crawl the database performing normalisation, cleanup, etc. on entries.",
+                                   parents=[parent_vb, parent_cfg])
+    pcrawl.add_argument("--prune", action='store_true', help="Remove duplicate structure from each parameter point")
+    # Disabled for now as it hasn't been fully implemented yet
+    # pcrawl.add_argument("--refine", dest="refine", type=str, nargs=1, default=None,
+    #                     help="Refine database by running spipe on all unique structures matching the "
+    #                          "criteria up to a distance of --refine-dist away from all parameter "
+    #                          "points in all parameter directions.  Takes the spipe yaml input as argument.")
+    # pcrawl.add_argument("--refine-dist", dest="refine_dist", type=float, default=0.1,
+    #                     help="The distance away from each parameter point to refine to.")
+    pcrawl.add_argument("--crit", dest="criteria", type=str, default=None,
+                        help="Confine the crawl to entries matching this criteria "
+                             "{\"pretty_formula\": \"AB\"}.")
+    pcrawl.set_defaults(func=crawl_db)
 
     # The 'init' subcommand.
     pinit = subparsers.add_parser("init", help="Initialization tools.", parents=[parent_vb])
@@ -468,9 +528,21 @@ if __name__ == "__main__":
     pmap.add_argument("--crit", dest="criteria", type=str, default=None, required=True,
                       help="Query criteria in typical json format. E.g., "
                            "{\"potential.params\": {\"A~B\": {\"sigma\": 1.5}}}.")
-    pmap.add_argument("--prop", dest="property", type=str, default="spacegroup.number",
+    pmap.add_argument("--prop", dest="property", type=str, default="spacegroup.symbol",
                       required=False, help="Use this structure property to create the map from")
     pmap.set_defaults(func=map_from_db)
+
+    # The 'tag' subcommand
+    ptag = subparsers.add_parser("tag",
+                                 help="Tag structures matching the query.",
+                                 parents=[parent_vb, parent_cfg])
+    ptag.add_argument("--crit", dest="criteria", type=str, required=True,
+                      help="Query criteria in typical json format. E.g., "
+                           "{\"task_id\": 1}.")
+    ptag.add_argument("-t", "--tag", dest="tag", type=str, nargs=1, required=True,
+                      help="Tag your runs for easier search."
+                           " Accepts multiple tags")
+    ptag.set_defaults(func=tag_db)
 
     # Parse args
     args = parser.parse_args()

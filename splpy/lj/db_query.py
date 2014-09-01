@@ -6,7 +6,7 @@ from splpy.util import OrderedPair
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2014"
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "Jul 16, 2014"
@@ -17,9 +17,7 @@ import pymongo
 
 import pymatgen as mg
 
-import matgendb as mgdb
-
-from splpy.interval import Interval
+import splpy.interval as interval
 import splpy.lj.db_query
 
 
@@ -72,7 +70,7 @@ class InteractionRange(object):
     def _param_to_condition(self, param):
         if param is None:
             return None
-        elif isinstance(param, Interval):
+        elif isinstance(param, interval.Interval):
             d = dict()
             if param.left_closed:
                 d["$gte"] = param.start
@@ -94,7 +92,7 @@ class InteractionRange(object):
         for val in ["epsilon", "sigma", "m", "n", "cut"]:
             if val in d:
                 try:
-                    parsed[val] = Interval.from_string(d[val])
+                    parsed[val] = interval.Interval.from_string(d[val])
                 except (ValueError, TypeError):
                     parsed[val] = d[val]
 
@@ -211,6 +209,9 @@ class VisitParamPoints(object):
             crit["potential.params_id"] = id
             callback(crit)
 
+    def num_points(self, query_engine):
+        return len(query_engine.get_param_ids(self._params_criteria))
+
 def get_unique_in_range(query_engine, range, matcher, criteria=None, limit=None, save_doc=True):
     class LowestEnergyStore:
         def __init__(self, lowest, limit):
@@ -266,3 +267,19 @@ def get_unique_in_range(query_engine, range, matcher, criteria=None, limit=None,
                 unique.append(group[0])
 
     return unique
+
+def surrounding_range(params, dist):
+    """
+    Get the InteractionRange that surround this point in parameter space up to a distance dist
+    in each parameter direction
+    """
+    range = LennardJonesSearchRange()
+    for pair, val in params.interactions.iteritems():
+        d = val.__dict__
+        intervals = dict()
+        for param in ["epsilon", "sigma", "m", "n", "cut"]:
+            val = d[param]
+            intervals[param] = interval.Closed(val - dist, val + dist)
+        range.add_interaction(pair.first, pair.second, InteractionRange(**intervals))
+
+    return range
