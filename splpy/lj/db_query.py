@@ -19,9 +19,11 @@ import pymatgen as mg
 
 import splpy.interval as interval
 import splpy.lj.db_query
+import splpy.lj.util as util
+from splpy.lj.util import Criteriable
 
 
-class InteractionRange(object):
+class InteractionRange(Criteriable):
     """
     Object for representing a range of parameters in the Lennard Jones
     parameter space.  Each of the parameters can either be:
@@ -112,6 +114,7 @@ class InteractionRange(object):
             conditions.append("cut: {}".format(self.cut))
         return ' '.join(conditions)
 
+
 class LennardJonesSearchRange(object):
 
     def __init__(self):
@@ -151,6 +154,7 @@ class LennardJonesSearchRange(object):
             r.add_interaction(species.first, species.second, InteractionRange.from_dict(inter))
         return r
 
+
 class VisitationEngine(object):
     class RunInstance:
         def __init__(self, visitor, properties=None):
@@ -181,6 +185,7 @@ class VisitationEngine(object):
         else:
             self._run.visitor(self._query_engine.query(self._run.properties, criteria))
 
+
 def visit_distinct_formulae(query_engine, criteria, callback):
     cur = query_engine.query(properties=["pretty_formula"], criteria=criteria)
     formulas = cur.distinct("pretty_formula")
@@ -189,6 +194,7 @@ def visit_distinct_formulae(query_engine, criteria, callback):
         crit = dict(criteria)
         crit["pretty_formula"] = formula
         callback(crit)
+
 
 def visit_distinct_spacegroups(query_engine, criteria, callback):
     cur = query_engine.query(properties=["spacegroup.number"], criteria=criteria)
@@ -199,20 +205,26 @@ def visit_distinct_spacegroups(query_engine, criteria, callback):
         crit["spacegroup.number"] = sg
         callback(crit)
 
+
 class VisitParamPoints(object):
-    def __init__(self, params_range):
-        self._params_criteria = params_range.to_criteria()
+    def __init__(self, params):
+        self._params_criteria = params.to_criteria()
 
     def __call__(self, query_engine, criteria, callback):
-        for id in query_engine.get_param_ids(self._params_criteria):
+        for params_id in query_engine.get_param_ids(self._params_criteria):
             crit = copy.deepcopy(criteria) if criteria else dict()
-            crit["potential.params_id"] = id
+            util.add_to_criteria(crit, "potential.params_id", params_id)
             callback(crit)
 
     def num_points(self, query_engine):
         return len(query_engine.get_param_ids(self._params_criteria))
 
-def get_unique_in_range(query_engine, range, matcher, criteria=None, limit=None, save_doc=True):
+
+def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_doc=True):
+    """
+    Get the unique structures at a parameter point or points.  The params parameter can
+    be either an LjInteractions or a InteractionRange.
+    """
     class LowestEnergyStore:
         def __init__(self, lowest, limit):
             self.lowest = lowest
@@ -243,7 +255,7 @@ def get_unique_in_range(query_engine, range, matcher, criteria=None, limit=None,
 
     crit = criteria if criteria else dict()
     ve = VisitationEngine(query_engine)
-    ve.add(splpy.lj.db_query.VisitParamPoints(range))
+    ve.add(splpy.lj.db_query.VisitParamPoints(params))
     ve.add(splpy.lj.db_query.visit_distinct_formulae)
 
     lowest = dict()
@@ -267,6 +279,7 @@ def get_unique_in_range(query_engine, range, matcher, criteria=None, limit=None,
                 unique.append(group[0])
 
     return unique
+
 
 def surrounding_range(params, dist):
     """

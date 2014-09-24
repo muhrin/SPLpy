@@ -4,22 +4,28 @@ This module contains functions used for/when crawling the database.
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2014"
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "Aug 30, 2014"
 
 import datetime
+import glob
 import itertools
 import logging
 import os
+import subprocess
+import shutil
+import tempfile
 import yaml
 
 from pymatgen.core.structure import Structure
 import pymatgen.analysis.structure_matcher as structure_matcher
 
+import splpy.lj.db_manip as db_manip
 import splpy.lj.db_query as db_query
 import splpy.lj.util
+import splpy.resio as resio
 
 logger = logging.getLogger(__name__)
 
@@ -117,47 +123,107 @@ class Refine(object):
         self.spipe_input = spipe_input
         self.dist = dist
         self.limit = limit
-        # TODO: Check if spipe is installed
+        # Check if spipe is installed
+        try:
+            from subprocess import DEVNULL  # py3k
+        except ImportError:
+            import os
+            DEVNULL = open(os.devnull, 'wb')
+        try:
+            subprocess.call(["spipe", "--help"], stdout=DEVNULL)
+            self.found_spipe = True
+        except OSError:
+            logger.error("spipe not found, can't refine database.")
+            self.found_spipe = False
+
+        self._matcher = structure_matcher.StructureMatcher()
 
     def __call__(self, params_doc, query_engine):
+        if not self.found_spipe:
+            return
+
+        params_id = params_doc["_id"]
         params = splpy.lj.util.LjInteractions.from_dict(params_doc)
-        range = db_query.surrounding_range(params, self.dist)
 
-        matcher = structure_matcher.StructureMatcher()
-        strs = db_query.get_unique_in_range(query_engine, range, matcher, limit=self.limit)
+        # Get the uniques at the current parameter point
+        my_structures = db_query.get_unique(query_engine, params, self._matcher, save_doc=True)
 
-        params_id = str(params_doc["_id"])
+        # Get uniques from surrounding points (exclude this point)
+        params_range = db_query.surrounding_range(params, self.dist)
+        surrounding_structures = db_query.get_unique(query_engine, params_range, self._matcher,
+                                                     criteria={"potential.params_id": {"$ne": params_id}},
+                                                     limit=self.limit)
+
+        # Cull uniques that are the same as any of my structures
+        for my in my_structures:
+            for surrounding in surrounding_structures:
+                if self._matcher.fit(my, surrounding):
+                    surrounding_structures.remove(surrounding)
+                    break
+
+        # Run spipe on remaining unique structures
         try:
-            run_dir = params_id
-            structures_dir = os.path.join(run_dir, "unique")
-            os.makedirs(structures_dir)
-
-            for struct in strs:
-                doc = struct.splpy_doc
-                res = splpy.resio.Res(struct, doc.get("name"), doc.get("pressure"), doc.get("energy"),
-                                      doc.get("spacegroup.symbol"), doc.get("times_found"))
-                res.write_file(os.path.join(structures_dir, "{}.res".format(doc["_id"])))
-
-            # Write the spipe yaml file for the run
-            with open(os.path.join(run_dir, self.spipe_input), 'w') as outfile:
-                spipe_settings = dict()
-                if os.path.exists(self.spipe_input):
-                    with open(self.spipe_input, 'r') as original:
-                        spipe_settings = yaml.load(original)
-                self._update_spipe_dict(params, "unique", spipe_settings)
-                outfile.write(yaml.dump(spipe_settings))
-
-                # TODO: Run spipe
-
-                # TODO: Read in all generated structures
-
-                # TODO: Find any new structures
-
-                # TODO: Insert any new structures into the database
-
-
+            run_dir = tempfile.mkdtemp()
         except OSError:
-            pass
+            logger.error("Failed to create temporary directory to run spipe")
+            return
+
+        self._prepare_spipe_files(params, surrounding_structures, run_dir)
+        del surrounding_structures[:]
+
+        # Run spipe
+        subprocess.Popen(["spipe", str(self.spipe_input)], cwd=run_dir).wait()
+
+        # Cull any structures that have relaxed to one of mine
+
+        # Read in all generated structures and group uniques
+        #relaxed_structures = [resio.Res.from_file(res).structure for res in glob.glob(os.path.join(run_dir, '*.res'))]
+        relaxed_structures = list()
+        for file in glob.glob(os.path.join(run_dir, '*.res')):
+            res = resio.Res.from_file(file)
+            res.structure.splpy_res = res
+            relaxed_structures.append(res.structure)
+        groups = self._matcher.group_structures(relaxed_structures)
+
+        new_structures = list()
+        for group in groups:
+            unique = True
+            for my in my_structures:
+                if self._matcher.fit(my, group[0]):
+                    unique = False
+                    break
+            if unique:
+                new_structures.append(group[0])
+
+        logger.info("Found {} new structures at parameter point {}".format(len(new_structures), params_id))
+
+        # Save remainder to db
+        for new in new_structures:
+            res = new.splpy_res
+            db_manip.insert_structure(query_engine.db, new, params, res.name, res.energy, res.pressure)
+
+        # Delete the temporary folder
+        shutil.rmtree(run_dir)
+
+    def _prepare_spipe_files(self, params, structures, dir):
+        structures_dir = os.path.join(dir, "unique")
+        os.makedirs(structures_dir)
+
+        # Save the res files
+        for struct in structures:
+            doc = struct.splpy_doc
+            res = resio.Res(struct, doc.get("name"), doc.get("pressure"), doc.get("energy"),
+                            doc.get("spacegroup.symbol"), doc.get("times_found"))
+            res.write_file(os.path.join(structures_dir, "{}.res".format(doc["_id"])))
+
+        # Write the spipe yaml file for the run
+        with open(os.path.join(dir, self.spipe_input), 'w') as outfile:
+            spipe_settings = dict()
+            if os.path.exists(self.spipe_input):
+                with open(self.spipe_input, 'r') as original:
+                    spipe_settings = yaml.load(original)
+            self._update_spipe_dict(params, "unique", spipe_settings)
+            outfile.write(yaml.dump(spipe_settings))
 
     def _update_spipe_dict(self, params, structures_dir, d):
         d["loadStructures"] = structures_dir

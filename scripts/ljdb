@@ -94,8 +94,8 @@ def crawl_db(args):
     functions = list()
     if args.prune:
         functions.append(db_crawl.Prune())
-    # if args.refine:
-    #     functions.append(db_crawl.Refine(args.refine, args.refine_dist))
+    if args.refine:
+        functions.append(db_crawl.Refine(args.refine, args.refine_dist))
 
     params_range = lj.db_query.LennardJonesSearchRange()
     if criteria:
@@ -423,13 +423,12 @@ if __name__ == "__main__":
                                    help="Crawl the database performing normalisation, cleanup, etc. on entries.",
                                    parents=[parent_vb, parent_cfg])
     pcrawl.add_argument("--prune", action='store_true', help="Remove duplicate structure from each parameter point")
-    # Disabled for now as it hasn't been fully implemented yet
-    # pcrawl.add_argument("--refine", dest="refine", type=str, nargs=1, default=None,
-    #                     help="Refine database by running spipe on all unique structures matching the "
-    #                          "criteria up to a distance of --refine-dist away from all parameter "
-    #                          "points in all parameter directions.  Takes the spipe yaml input as argument.")
-    # pcrawl.add_argument("--refine-dist", dest="refine_dist", type=float, default=0.1,
-    #                     help="The distance away from each parameter point to refine to.")
+    pcrawl.add_argument("--refine", dest="refine", type=str, default=None,
+                        help="Refine database by running spipe on all unique structures matching the "
+                             "criteria up to a distance of --refine-dist away from all parameter "
+                             "points in all parameter directions.  Takes the spipe yaml input as argument.")
+    pcrawl.add_argument("--refine-dist", dest="refine_dist", type=float, default=0.1,
+                        help="The distance away from each parameter point to refine to.")
     pcrawl.add_argument("--crit", dest="criteria", type=str, default=None,
                         help="Confine the crawl to entries matching this criteria "
                              "{\"pretty_formula\": \"AB\"}.")

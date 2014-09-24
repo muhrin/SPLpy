@@ -6,14 +6,17 @@ from __future__ import division
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2014"
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "Aug 2, 2014"
 
+from abc import ABCMeta, abstractmethod
+
 from pymatgen.serializers.json_coders import MSONable
 
 from splpy.util import OrderedPair
+
 
 class DB:
     # Constants for keys
@@ -33,7 +36,22 @@ class DB:
     ]
 
 
-class LjInteraction(MSONable):
+class Criteriable(object):
+    """
+    This is an abstract class that defines an API for objects that can express
+    a MongoDB criteria.  This is done using the to_criteria method.
+    """
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def to_criteria(self):
+        """
+        A MongoDB compatible criteria dict
+        """
+        pass
+
+
+class LjInteraction(MSONable, Criteriable):
     """
     A set of Lennard-Jones interaction parameters
     """
@@ -71,8 +89,15 @@ class LjInteraction(MSONable):
     def from_dict(self, d):
         return LjInteraction(d["epsilon"], d["sigma"], d["m"], d["n"], d["cut"])
 
+    def to_criteria(self):
+        return {"epsilon": self.epsilon,
+                "sigma": self.sigma,
+                "m": self.m,
+                "n": self.n,
+                "cut": self.cut}
 
-class LjInteractions(MSONable):
+
+class LjInteractions(MSONable, Criteriable):
     """
     A set of Lennard-Jones interactions between particular particle species
     """
@@ -94,7 +119,7 @@ class LjInteractions(MSONable):
     def to_dict(self):
         d = {"@module": self.__class__.__module__,
              "@class": self.__class__.__name__}
-        d.update({k: v.to_dict for k, v in self._interactions.iteritems()})
+        d.update({str(k): v.to_dict for k, v in self._interactions.iteritems()})
         return d
 
     @property
@@ -105,9 +130,8 @@ class LjInteractions(MSONable):
             a.extend(inter.to_array)
         return a
 
-
     @classmethod
-    def from_dict(self, d):
+    def from_dict(cls, d):
         inters = LjInteractions()
         for key, value in d.iteritems():
             try:
@@ -118,4 +142,27 @@ class LjInteractions(MSONable):
 
         return inters
 
+    def to_criteria(self):
+        crit = dict()
+        # Need to flatten the dictionary so the criteria are in the format:
+        # {"A~B.epsilon": 1.0, "A~B.sigma": 2.5, etc}
+        for pair, params in self._interactions.iteritems():
+            for param, value in params.to_criteria().iteritems():
+                crit["{}.{}".format(str(pair), param)] = value
 
+        return crit
+
+
+def normalised_symmetry_precision(structure, precision=0.01):
+    len_per_site = (structure.volume / structure.num_sites) ** 0.5
+    return precision * len_per_site
+
+
+def add_to_criteria(crit, key, value):
+    if key in crit:
+        if not "$and" in crit:
+            crit["$and"] = [{key: crit[key]}]
+        crit.pop(key)
+        crit["$and"].append({key: value})
+    else:
+        crit[key] = value

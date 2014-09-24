@@ -7,7 +7,7 @@ and insert it into a Mongo database.
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2014"
-__version__ = "0.0.4"
+__version__ = "0.0.5"
 __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "May 27, 2014"
@@ -109,7 +109,7 @@ class LjToDbTaskDrone(AbstractDrone):
     a database using Python's multiprocessing.
     """
 
-    #Version of this lj assimilate document.
+    # Version of this lj assimilate document.
     __version__ = "0.0.1"
 
     class ParamsInfo(object):

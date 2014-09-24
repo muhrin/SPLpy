@@ -1,0 +1,48 @@
+
+
+potential: &pot
+  lennardJones:
+
+rngSeed: time
+
+nProcs: &nProcs
+  8
+
+autoScale:
+
+niggliReduce:
+
+geomOptimise:
+  paramsTag: lj
+  optimiser: &opt
+    tpsd:
+      potential: *pot
+
+geomOptimise preGeomOptimise:
+  optimise: lattice
+  paramsTag: lj
+  optimiser: *opt
+  pressure: 0.1
+  failAction: continue
+  writeSummary: false
+  maxIter: 100
+  energyTol: 1e-5
+
+removeDuplicates:
+  comparator:
+    sortedDist:
+
+writeStructures:
+  format: res
+
+keepStableCompositions:
+  writeHull: true
+
+run: loadStructures | autoScale | niggliReduce | preGeomOptimise | geomOptimise | writeStructures | keepStableCompositions
+
+
+engine:
+  multithreaded:
+    nThreads: *nProcs
+
+
