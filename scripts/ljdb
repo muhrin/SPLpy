@@ -23,6 +23,7 @@ import sys
 import pymongo
 
 import pymatgen as mg
+from pymatgen.core.composition import Composition
 
 import matgendb as mgdb
 import matgendb.util
@@ -40,6 +41,21 @@ from splpy.lj.db_query import VisitationEngine
 import splpy.lj.db_crawl as db_crawl
 
 _log = logging.getLogger("lj")  # parent
+
+
+# Genetic stuff that's common too all query types
+def init_criteria(args):
+    criteria = parse_criteria_or_die(args.criteria)
+    if criteria is None:
+        criteria = dict()
+
+    try:
+        if args.stoichiometry:
+            criteria['pretty_formula'] = args.stoichiometry.reduced_formula
+    except AttributeError:
+        pass
+
+    return criteria
 
 
 def init_db(args):
@@ -96,6 +112,8 @@ def crawl_db(args):
         functions.append(db_crawl.Prune())
     if args.refine:
         functions.append(db_crawl.Refine(args.refine, args.refine_dist))
+    if args.prototype:
+        functions.append(db_crawl.assign_prototypes)
 
     params_range = lj.db_query.LennardJonesSearchRange()
     if criteria:
@@ -116,11 +134,13 @@ def crawl_db(args):
 def query_db(args):
     from prettytable import PrettyTable
 
+    # Set up a connection to the database
     d = mgdb.util.get_settings(args.config_file)
     qe = LjQueryEngine(host=d["host"], port=d["port"], database=d["database"],
                        user=d["readonly_user"], password=d["readonly_password"],
                        collection=d["collection"], aliases_config=d.get("aliases_config", None))
-    criteria = parse_criteria_or_die(args.criteria)
+
+    criteria = init_criteria(args)
 
     # TODO: document this 'feature' --dang 4/4/2013
     is_a_file = lambda s: len(s) == 1 and s[0].startswith(':')
@@ -148,11 +168,12 @@ def query_db(args):
 
 def get_from_db(args):
     d = mgdb.util.get_settings(args.config_file)
+    collection = args.collection if args.collection else d["collection"]
     qe = LjQueryEngine(host=d["host"], port=d["port"], database=d["database"],
                        user=d["readonly_user"], password=d["readonly_password"],
-                       collection=d["collection"], aliases_config=d.get("aliases_config", None))
+                       collection=collection, aliases_config=d.get("aliases_config", None))
 
-    criteria = parse_criteria_or_die(args.criteria)
+    criteria = init_criteria(args)
     properties = ["_id", "name", "times_found", "energy", "spacegroup.symbol", "pressure", "structure"]
 
     cur = qe.query(properties=properties, criteria=criteria)
@@ -204,7 +225,7 @@ def get_unique_from_db(args):
     properties = ["_id", "name", "times_found", "energy", "spacegroup.symbol", "spacegroup.number", "pressure",
                   "structure", "pretty_formula"]
 
-    criteria = parse_criteria_or_die(args.criteria)
+    criteria = init_criteria(args)
 
     ve = VisitationEngine(qe)
     params_range = lj.db_query.LennardJonesSearchRange()
@@ -288,7 +309,7 @@ def map_from_db(args):
             formula_dict[doc["potential.params_id"]] = doc
             results.close()
 
-    criteria = parse_criteria_or_die(args.criteria)
+    criteria = init_criteria(args)
 
     # Find out which two parameters the user want to create the map from
     params_range = lj.db_query.LennardJonesSearchRange()
@@ -347,7 +368,7 @@ def tag_db(args):
                        user=d["readonly_user"], password=d["readonly_password"],
                        collection=d["collection"], aliases_config=d.get("aliases_config", None))
 
-    criteria = parse_criteria_or_die(args.criteria)
+    criteria = init_criteria(args)
     qe.params.update(criteria, {"$addToSet": {"tags": args.tag}})
 
 
@@ -422,6 +443,7 @@ if __name__ == "__main__":
     pcrawl = subparsers.add_parser("crawl",
                                    help="Crawl the database performing normalisation, cleanup, etc. on entries.",
                                    parents=[parent_vb, parent_cfg])
+    pcrawl.add_argument("--prototype", action='store_true', help="Assign a prototype to each structure")
     pcrawl.add_argument("--prune", action='store_true', help="Remove duplicate structure from each parameter point")
     pcrawl.add_argument("--refine", dest="refine", type=str, default=None,
                         help="Refine database by running spipe on all unique structures matching the "
@@ -481,6 +503,8 @@ if __name__ == "__main__":
     pquery.add_argument("--crit", dest="criteria", type=str, default=None,
                         help="Query criteria in typical json format. E.g., "
                              "{\"task_id\": 1}.")
+    pquery.add_argument("--stoich", dest="stoichiometry", type=Composition, default=None,
+                        help="Search for structures with a particular stoichiometry e.g. AB2")
     pquery.add_argument("--props", dest="properties", type=str, default=[],
                         nargs='+', required=True,
                         help="Desired properties. Repeatable. E.g., pretty_formula, "
@@ -493,6 +517,20 @@ if __name__ == "__main__":
     pquery.add_argument("--dump", dest="dump_json", action='store_true', default=False,
                         help="Simply dump results to JSON instead of a tabular view")
     pquery.set_defaults(func=query_db)
+
+    # The 'prototype' subcommand.
+    pprototype = subparsers.add_parser("prototype",
+                                       help="Perform operations on the prototypes database collection.",
+                                       parents=[parent_vb, parent_cfg])
+    pprototype.add_argument("--crit", dest="criteria", type=str, default=None,
+                            help="Query criteria in typical json format. E.g., "
+                                 "{\"anonymous_formula\": \"AB\"}.")
+    pprototype.add_argument("--sort", dest="sort", type=str, default=[],
+                            nargs='+', required=False,
+                            help="Property to sort the query by")
+    pprototype.add_argument("--limit", dest="limit", type=int, default=None,
+                            help="Limit results according to sort criteria (if specified)")
+    pprototype.set_defaults(func=get_from_db, collection='prototypes')
 
     # The 'get' subcommand.
     pget = subparsers.add_parser("get",
@@ -526,9 +564,11 @@ if __name__ == "__main__":
                                  parents=[parent_vb, parent_cfg])
     pmap.add_argument("--crit", dest="criteria", type=str, default=None, required=True,
                       help="Query criteria in typical json format. E.g., "
-                           "{\"potential.params\": {\"A~B\": {\"sigma\": 1.5}}}.")
+                           "{\"potential.params.A~B.sigma\": \"[0.5, 1.5)\"}}}.")
     pmap.add_argument("--prop", dest="property", type=str, default="spacegroup.symbol",
                       required=False, help="Use this structure property to create the map from")
+    pmap.add_argument("--stoich", dest="stoichiometry", type=Composition, default=None,
+                      help="Search for structures with a particular stoichiometry e.g. AB2")
     pmap.set_defaults(func=map_from_db)
 
     # The 'tag' subcommand

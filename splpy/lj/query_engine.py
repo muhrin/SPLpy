@@ -12,6 +12,8 @@ __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "July 23, 2014"
 
+import bson.objectid
+
 from matgendb.query_engine import QueryEngine
 
 from pymatgen import Structure, Composition
@@ -154,6 +156,13 @@ class LjQueryEngine(QueryEngine):
             parsed_crit.update(self.get_param_id_criteria(params_range))
         except KeyError:
             pass
+
+        for key, value in criteria.iteritems():
+            if isinstance(value, str) and value.startswith("ObjectId"):
+                obj = bson.objectid.ObjectId(value[10:len(value) - 2])
+                # criteria.pop(value)
+                parsed_crit[key] = obj
+
         parsed_crit.update(super(LjQueryEngine, self)._parse_criteria(criteria))
         return parsed_crit
 

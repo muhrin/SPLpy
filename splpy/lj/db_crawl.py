@@ -24,6 +24,7 @@ import pymatgen.analysis.structure_matcher as structure_matcher
 
 import splpy.lj.db_manip as db_manip
 import splpy.lj.db_query as db_query
+import splpy.lj.prototype as prototype
 import splpy.lj.util
 import splpy.resio as resio
 
@@ -128,6 +129,7 @@ class Refine(object):
             from subprocess import DEVNULL  # py3k
         except ImportError:
             import os
+
             DEVNULL = open(os.devnull, 'wb')
         try:
             subprocess.call(["spipe", "--help"], stdout=DEVNULL)
@@ -177,7 +179,7 @@ class Refine(object):
         # Cull any structures that have relaxed to one of mine
 
         # Read in all generated structures and group uniques
-        #relaxed_structures = [resio.Res.from_file(res).structure for res in glob.glob(os.path.join(run_dir, '*.res'))]
+        # relaxed_structures = [resio.Res.from_file(res).structure for res in glob.glob(os.path.join(run_dir, '*.res'))]
         relaxed_structures = list()
         for file in glob.glob(os.path.join(run_dir, '*.res')):
             res = resio.Res.from_file(file)
@@ -236,6 +238,17 @@ class Refine(object):
         d["potential"]["lennardJones"] = {"params": params_dict}
 
         return d
+
+
+def assign_prototypes(params, query_engine):
+    prototypes = query_engine.db['prototypes']
+    # Assign prototypes to all the structures at this parameter point
+    for structure_doc in query_engine.query(criteria={"potential.params_id": params["_id"]}):
+        # Does the structure already have a prototype assigned?
+        if "prototype_id" not in structure_doc:
+            # Either get the prototype or insert this structure as a new one
+            proto_id = prototype.insert_prototype(Structure.from_dict(structure_doc["structure"]), query_engine.db)[0]
+            query_engine.collection.update({'_id': structure_doc['_id']}, {"$set": {'prototype_id': proto_id}})
 
 
 def are_close_fraction(value1, value2, tolerance):

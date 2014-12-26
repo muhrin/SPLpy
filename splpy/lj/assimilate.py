@@ -284,7 +284,7 @@ class LjToDbTaskDrone(AbstractDrone):
         #d["density"] = s.density
 
         # Figure out the symmetry group
-        sg = SymmetryFinder(s, cls.normalised_symmetry_precision(s), -1)
+        sg = SymmetryFinder(s, util.normalised_symmetry_precision(s), -1)
         d["spacegroup"] = {"symbol": unicode(sg.get_spacegroup_symbol(),
                                              errors="ignore"),
                            "number": sg.get_spacegroup_number(),
@@ -304,14 +304,6 @@ class LjToDbTaskDrone(AbstractDrone):
         #Convert to full uri path.
         if use_full_uri:
             d["file_name"] = get_uri(resfile)
-
-    @classmethod
-    def length_per_site(cls, structure):
-        return (structure.volume / structure.num_sites) ** 0.5
-
-    @classmethod
-    def normalised_symmetry_precision(cls, structure, precision=0.01):
-        return precision * cls.length_per_site(structure)
 
     def _assimilate_resfile(self, resfile, params_info, db):
         uri = get_uri(resfile)

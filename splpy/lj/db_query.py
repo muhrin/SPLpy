@@ -207,8 +207,10 @@ def visit_distinct_spacegroups(query_engine, criteria, callback):
 
 
 class VisitParamPoints(object):
-    def __init__(self, params):
-        self._params_criteria = params.to_criteria()
+    def __init__(self, params=None):
+        self._params_criteria = None
+        if params:
+            self._params_criteria = params.to_criteria()
 
     def __call__(self, query_engine, criteria, callback):
         for params_id in query_engine.get_param_ids(self._params_criteria):
