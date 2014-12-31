@@ -2,6 +2,7 @@
 This module contains code relating to structure prototypes and their storage
 in the database
 """
+from splpy.util import normalised_symmetry_precision
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2014"
@@ -17,7 +18,6 @@ from pymatgen.transformations.standard_transformations import SubstitutionTransf
 from pymatgen.symmetry.finder import SymmetryFinder
 import pymatgen.analysis.structure_matcher as structure_matcher
 
-import splpy.lj.util as util
 import splpy.util
 
 
@@ -33,7 +33,7 @@ def create_prototype(structure):
     str_copy.scale_lattice(str_copy.num_sites)
 
     sg = SymmetryFinder(str_copy,
-                        util.normalised_symmetry_precision(str_copy), -1)
+                        normalised_symmetry_precision(str_copy), -1)
     str_copy = sg.get_conventional_standard_structure()
 
     return str_copy
@@ -69,12 +69,13 @@ def create_transformations(structure):
 
 
 def find_prototype(structure, db):
+    # Get the prototypes collection
     prototypes = db['prototypes']
 
     structure = create_prototype(structure)
     # Find spacegroup
     sg = SymmetryFinder(structure,
-                        util.normalised_symmetry_precision(structure), -1)
+                        normalised_symmetry_precision(structure), -1)
 
     matcher = structure_matcher.StructureMatcher(primitive_cell=False, attempt_supercell=True)
     transformations = create_transformations(structure)

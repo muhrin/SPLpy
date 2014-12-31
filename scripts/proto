@@ -1,0 +1,91 @@
+#!/usr/bin/env python
+
+"""
+A helper script for interacting with a Lennard-Jones database
+"""
+
+__author__ = "Martin Uhrin"
+__copyright__ = "Copyright 2014, Martin Uhrin"
+__version__ = "0.0.1"
+__maintainer__ = "Martin Uhrin"
+__email__ = "martin.uhrin.10@ucl.ac.uk"
+__date__ = "Dec 29, 2014"
+
+import argparse
+import logging
+import os
+import yaml
+
+import bson.objectid
+
+import matgendb as mgdb
+import matgendb.util
+
+import splpy.util
+from splpy.lj.query_engine import LjQueryEngine
+
+
+_log = logging.getLogger("proto")  # parent
+
+
+def update_prototypes(args):
+    d = mgdb.util.get_settings(args.config_file)
+    qe = LjQueryEngine(host=d["host"], port=d["port"], database=d["database"],
+                       user=d["readonly_user"], password=d["readonly_password"],
+                       collection=args.collection, aliases_config=d.get("aliases_config", None))
+
+    with open(args.update_file) as update_file:
+        update = yaml.load(update_file)
+
+        protos = qe.db[args.collection]
+        for proto_id, entry in update.iteritems():
+            protos.update({'_id': bson.objectid.ObjectId(proto_id)}, {"$set": entry})
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="""
+    proto is a command line utility to interact with the prototypes collection
+    of a database
+    \n\n
+    Author: {}\n
+    Version: {}\n
+    Last updated: Dev 29 2014""".format(__author__, __version__))
+
+    # Parents for all subparsers.
+    parent_vb = argparse.ArgumentParser(add_help=False)
+    parent_vb.add_argument('--quiet', '-q', dest='quiet', action="store_true", default=False,
+                           help="Minimal verbosity.")
+    parent_vb.add_argument('--verbose', '-v', dest='vb', action="count", default=0,
+                           help="Print more verbose messages to standard error. Repeatable. (default=ERROR)")
+    parent_cfg = argparse.ArgumentParser(add_help=False)
+    parent_cfg.add_argument("-c", "--config", dest="config_file", type=str, default="ljdb.json",
+                            help="Config file to use. Generate one using mgdb "
+                                 "init --config filename.json if necessary. "
+                                 "Otherwise, the code searches for an ljdb.json first"
+                                 "then ~/.ljdb.json. If none is found, an no-authentication "
+                                 "localhost:27017/lj database and structures "
+                                 "collection is assumed.")
+    parent_cfg.add_argument("--collection", dest="collection", type=str, default="prototypes",
+                            help="The prototypes collection.")
+
+    # Init for all subparsers.
+    subparsers = parser.add_subparsers()
+
+    # The 'update' subcommand.
+    pupdate = subparsers.add_parser("update",
+                                    help="Update prototypes entries from a YAML file.",
+                                    parents=[parent_vb, parent_cfg])
+    pupdate.add_argument("update_file", type=str, help="The YAML file to update the prototypes from")
+    pupdate.set_defaults(func=update_prototypes)
+
+    # Parse args
+    args = parser.parse_args()
+
+    splpy.util.init_logging(args, _log)
+
+    if not os.path.exists(args.config_file):
+        home_config = os.path.expanduser('~/.ljdb.json')
+        if os.path.exists(home_config):
+            args.config_file = home_config
+
+    # Run appropriate subparser function.
+    args.func(args)

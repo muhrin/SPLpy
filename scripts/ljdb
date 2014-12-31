@@ -18,6 +18,7 @@ import json
 import logging
 import multiprocessing
 import os.path
+import StringIO
 import sys
 
 import pymongo
@@ -31,10 +32,12 @@ import matgendb.util
 from pymatgen.apps.borg.queen import BorgQueen
 import pymatgen.analysis.structure_matcher as structure_matcher
 
+import splpy.util
 import splpy.lj as lj
 import splpy.lj.util
 import splpy.resio
 import splpy.interval
+import splpy.map
 from splpy.lj.assimilate import LjToDbTaskDrone
 from splpy.lj.query_engine import LjQueryEngine
 from splpy.lj.db_query import VisitationEngine
@@ -266,7 +269,39 @@ def get_unique_from_db(args):
 
 
 def map_from_db(args):
-    from subprocess import call
+    import subprocess
+
+    def process_properties(args, lowest, query_engine):
+        if args.property == "prototype":
+            protos = query_engine.db["prototypes"]
+            for formula, params_map in lowest.iteritems():
+                # Get the set of all prototype ids we need
+                proto_ids = set([doc["prototype_id"] for doc in params_map.itervalues()])
+                proto_ids.discard(None)
+
+                proto_values = dict()
+                for proto_id in proto_ids:
+                    value = None
+                    doc = protos.find({"_id": proto_id})[0]
+                    if "structure_type" in doc:
+                        value = doc["structure_type"]
+                    else:
+                        if "strukturbericht" in doc:
+                            value = doc["structure_type"]
+                        elif "pearson" in doc:
+                            value = "{} ({})".format(doc["spacegroup.symbol"], doc["pearson"])
+
+                    if value:
+                        proto_values[proto_id] = value
+
+                # Set the values for each of the parameter points
+                for doc in params_map.itervalues():
+                    if doc["prototype_id"] in proto_values:
+                        doc["prototype"] = proto_values[doc["prototype_id"]]
+                    else:
+                        # Use the spacegroup as a fallback
+                        doc["prototype"] = doc["spacegroup.symbol"]
+
 
     def to_latex_string(interaction_string):
         tokens = interaction_string.split('.')
@@ -313,9 +348,8 @@ def map_from_db(args):
 
     # Find out which two parameters the user want to create the map from
     params_range = lj.db_query.LennardJonesSearchRange()
-    if criteria:
-        if "potential.params" in criteria:
-            params_range = lj.db_query.LennardJonesSearchRange.from_dict(criteria.pop("potential.params"))
+    if criteria and "potential.params" in criteria:
+        params_range = lj.db_query.LennardJonesSearchRange.from_dict(criteria.pop("potential.params"))
 
     map_params = list()
     for pair, interaction in params_range.interactions.iteritems():
@@ -332,7 +366,12 @@ def map_from_db(args):
                        user=d["readonly_user"], password=d["readonly_password"],
                        collection=d["collection"], aliases_config=d.get("aliases_config", None))
 
-    properties = ["pretty_formula", "potential.params_id", args.property]
+    properties = ["pretty_formula", "potential.params_id"]
+    # Special case for using the structure prototype as the property to map
+    if args.property == 'prototype':
+        properties.extend(["prototype_id", "spacegroup.symbol"])
+    else:
+        properties.append(args.property)
     properties.extend(map_params)
 
     ve = VisitationEngine(qe)
@@ -346,6 +385,7 @@ def map_from_db(args):
     lowest = dict()
     getter = LowestEnergyStore(lowest)
     ve.run_queries(getter, properties=properties, criteria=criteria)
+    process_properties(args, lowest, qe)
 
     # Put in the axes labels
     params = ["-x {}".format(to_latex_string(map_params[0])), "-y {}".format(to_latex_string(map_params[1]))]
@@ -359,7 +399,12 @@ def map_from_db(args):
         f.close()
         args = ["smap", filename]
         args.extend(params)
-        call(args)
+        proc = subprocess.Popen(args, stdout=subprocess.PIPE)
+        output = StringIO.StringIO()
+        output.write(proc.communicate()[0])
+        output.seek(0, 0)
+        splpy.map.draw_map(output, 'matplotlib', output_name=str(formula))
+        output.close()
 
 
 def tag_db(args):
@@ -370,21 +415,6 @@ def tag_db(args):
 
     criteria = init_criteria(args)
     qe.params.update(criteria, {"$addToSet": {"tags": args.tag}})
-
-
-def init_logging(args):
-    """Initialize verbosity
-    """
-    _log.propagate = False
-    hndlr = logging.StreamHandler()
-    hndlr.setFormatter(logging.Formatter("[%(levelname)-6s] %(asctime)s %(name)s :: %(message)s"))
-    _log.addHandler(hndlr)
-    if args.quiet:
-        lvl = logging.CRITICAL
-    else:
-        # Level:  default      -v            -vv
-        lvl = (logging.WARN, logging.INFO, logging.DEBUG)[min(args.vb, 2)]
-    _log.setLevel(lvl)
 
 
 def parse_sort_tokens(tokens):
@@ -518,20 +548,6 @@ if __name__ == "__main__":
                         help="Simply dump results to JSON instead of a tabular view")
     pquery.set_defaults(func=query_db)
 
-    # The 'prototype' subcommand.
-    pprototype = subparsers.add_parser("prototype",
-                                       help="Perform operations on the prototypes database collection.",
-                                       parents=[parent_vb, parent_cfg])
-    pprototype.add_argument("--crit", dest="criteria", type=str, default=None,
-                            help="Query criteria in typical json format. E.g., "
-                                 "{\"anonymous_formula\": \"AB\"}.")
-    pprototype.add_argument("--sort", dest="sort", type=str, default=[],
-                            nargs='+', required=False,
-                            help="Property to sort the query by")
-    pprototype.add_argument("--limit", dest="limit", type=int, default=None,
-                            help="Limit results according to sort criteria (if specified)")
-    pprototype.set_defaults(func=get_from_db, collection='prototypes')
-
     # The 'get' subcommand.
     pget = subparsers.add_parser("get",
                                  help="Get structures from the database, same as query but saves structures.",
@@ -539,6 +555,8 @@ if __name__ == "__main__":
     pget.add_argument("--crit", dest="criteria", type=str, default=None,
                       help="Query criteria in typical json format. E.g., "
                            "{\"task_id\": 1}.")
+    pget.add_argument("--collection", dest="collection", type=str, default=None, required=False,
+                      help="The collection to get the structures from.")
     pget.add_argument("--sort", dest="sort", type=str, default=[],
                       nargs='+', required=False,
                       help="Property to sort the query by")
@@ -565,7 +583,7 @@ if __name__ == "__main__":
     pmap.add_argument("--crit", dest="criteria", type=str, default=None, required=True,
                       help="Query criteria in typical json format. E.g., "
                            "{\"potential.params.A~B.sigma\": \"[0.5, 1.5)\"}}}.")
-    pmap.add_argument("--prop", dest="property", type=str, default="spacegroup.symbol",
+    pmap.add_argument("--prop", dest="property", type=str, default="prototype",
                       required=False, help="Use this structure property to create the map from")
     pmap.add_argument("--stoich", dest="stoichiometry", type=Composition, default=None,
                       help="Search for structures with a particular stoichiometry e.g. AB2")
@@ -586,7 +604,7 @@ if __name__ == "__main__":
     # Parse args
     args = parser.parse_args()
 
-    init_logging(args)
+    splpy.util.init_logging(args, _log)
 
     if not os.path.exists(args.config_file):
         home_config = os.path.expanduser('~/.ljdb.json')

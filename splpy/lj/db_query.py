@@ -96,7 +96,7 @@ class InteractionRange(Criteriable):
                 try:
                     parsed[val] = interval.Interval.from_string(d[val])
                 except (ValueError, TypeError):
-                    parsed[val] = d[val]
+                    parsed[val] = float(d[val])
 
         return InteractionRange(**parsed)
 

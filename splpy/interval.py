@@ -43,6 +43,7 @@ class Interval(object):
             return LeftClosedRightOpen.from_string(s)
         except ValueError:
             pass
+        raise ValueError("Passed invalid interval format: {}.".format(s))
 
 
     @abstractproperty

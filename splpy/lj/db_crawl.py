@@ -241,14 +241,14 @@ class Refine(object):
 
 
 def assign_prototypes(params, query_engine):
-    prototypes = query_engine.db['prototypes']
-    # Assign prototypes to all the structures at this parameter point
-    for structure_doc in query_engine.query(criteria={"potential.params_id": params["_id"]}):
-        # Does the structure already have a prototype assigned?
-        if "prototype_id" not in structure_doc:
-            # Either get the prototype or insert this structure as a new one
-            proto_id = prototype.insert_prototype(Structure.from_dict(structure_doc["structure"]), query_engine.db)[0]
-            query_engine.collection.update({'_id': structure_doc['_id']}, {"$set": {'prototype_id': proto_id}})
+    # Assign prototypes to all the structures at this parameter point that do not have a prototype
+    for structure_doc in query_engine.query(
+            criteria={"potential.params_id": params["_id"], "prototype_id": {"$exists": 0}},
+            properties=["_id", "structure"]):
+
+        # Either get the prototype or insert this structure as a new one
+        proto_id = prototype.insert_prototype(Structure.from_dict(structure_doc["structure"]), query_engine.db)[0]
+        query_engine.collection.update({'_id': structure_doc['_id']}, {"$set": {'prototype_id': proto_id}})
 
 
 def are_close_fraction(value1, value2, tolerance):

@@ -13,6 +13,7 @@ from splpy.lj.query_engine import LjQueryEngine
 import splpy.resio
 from splpy.lj.db_query import VisitationEngine
 import splpy.lj.util
+from splpy.util import normalised_symmetry_precision
 
 
 class DiamondFinder:
@@ -37,7 +38,7 @@ class DiamondFinder:
             site['label'] = u'B'
             site['species'] = [{u'occu': 1, u'element': u'B'}]
         structure = mg.Structure.from_dict(structure_dict)
-        sg = mg.symmetry.finder.SymmetryFinder(structure, splpy.lj.util.normalised_symmetry_precision(structure), -1)
+        sg = mg.symmetry.finder.SymmetryFinder(structure, normalised_symmetry_precision(structure), -1)
 
         if sg.get_spacegroup_number() == 227 and self.matcher.fit(self.diamond, structure):
             params = doc['potential']['params']

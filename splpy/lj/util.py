@@ -153,9 +153,7 @@ class LjInteractions(MSONable, Criteriable):
         return crit
 
 
-def normalised_symmetry_precision(structure, precision=0.01):
-    len_per_site = (structure.volume / structure.num_sites) ** 0.5
-    return precision * len_per_site
+
 
 
 def add_to_criteria(crit, key, value):

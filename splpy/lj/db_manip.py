@@ -2,6 +2,7 @@
 This module defines a set of functions and classes that aid in manipulating
 the Lennard-Jones structure database
 """
+from splpy.util import normalised_symmetry_precision
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2014"
@@ -121,7 +122,7 @@ def _generate_entry(structure, params, name, energy, pressure):
                   "chemsys": "-".join(sorted(el_amt.keys()))})
 
     # Figure out the symmetry group
-    sg = SymmetryFinder(structure, util.normalised_symmetry_precision(structure), -1)
+    sg = SymmetryFinder(structure, normalised_symmetry_precision(structure), -1)
     entry["spacegroup"] = {"symbol": unicode(sg.get_spacegroup_symbol(), errors="ignore"),
                            "number": sg.get_spacegroup_number(),
                            "point_group": unicode(sg.get_point_group(), errors="ignore"),

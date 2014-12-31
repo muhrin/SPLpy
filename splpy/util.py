@@ -6,7 +6,6 @@ Module for helper functions and other things that don't fit neatly elsewhere.
 
 from pymatgen.symmetry.finder import SymmetryFinder
 
-import splpy.lj.util
 
 def find_or_create(collection, query, update, **kwargs):
     return collection.find_and_modify(query, {"$setOnInsert": update}, upsert=True, new=True, **kwargs)
@@ -18,6 +17,7 @@ class OrderedPair(object):
     accessed in order using the .first and .second attributes
 
     """
+
     def __init__(self, x0=None, x1=None):
         self._first = None
         self._second = None
@@ -78,7 +78,7 @@ def create_structure_db_info(structure):
               "chemsys": "-".join(sorted(el_amt.keys()))})
 
     # Figure out the symmetry group
-    sg = SymmetryFinder(structure, splpy.lj.util.normalised_symmetry_precision(structure), -1)
+    sg = SymmetryFinder(structure, normalised_symmetry_precision(structure), -1)
     d["spacegroup"] = {"symbol": unicode(sg.get_spacegroup_symbol(),
                                          errors="ignore"),
                        "number": sg.get_spacegroup_number(),
@@ -89,3 +89,25 @@ def create_structure_db_info(structure):
                        "hall": sg.get_hall()}
 
     return d
+
+
+def init_logging(args, logger):
+    """Initialize verbosity
+    """
+    import logging
+
+    logger.propagate = False
+    hndlr = logging.StreamHandler()
+    hndlr.setFormatter(logging.Formatter("[%(levelname)-6s] %(asctime)s %(name)s :: %(message)s"))
+    logger.addHandler(hndlr)
+    if args.quiet:
+        lvl = logging.CRITICAL
+    else:
+        # Level:  default      -v            -vv
+        lvl = (logging.WARN, logging.INFO, logging.DEBUG)[min(args.vb, 2)]
+    logger.setLevel(lvl)
+
+
+def normalised_symmetry_precision(structure, precision=0.01):
+    len_per_site = (structure.volume / structure.num_sites) ** 0.5
+    return precision * len_per_site
