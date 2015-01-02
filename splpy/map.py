@@ -42,7 +42,7 @@ class MatplotlibOutputter:
                 self.draw_face(ax, map_file, line)
             line = map_file.readline()
 
-        ax.set_aspect('equal', 'datalim')
+        ax.set_aspect('equal', 'box')
         # Autoscale both x and y making them tight
         ax.autoscale_view(True, True, True)
         plt.draw()
@@ -104,8 +104,7 @@ class MatplotlibOutputter:
             line = map_file.readline().rstrip(os.linesep)
 
         face_path = mpath.Path(coords, codes, closed=True)
-        face_patch = mpatches.PathPatch(face_path, alpha=0.5, facecolor='white',
-                                        color=self.get_property(label, 'color'))
+        face_patch = mpatches.PathPatch(face_path, fill=False, color=self.get_property(label, 'color'))
         axes.add_patch(face_patch)
 
         poly = Polygon(poly_coords)
@@ -121,7 +120,7 @@ class MatplotlibOutputter:
             properties = all_properties[label]
             if prop in properties:
                 return properties[prop]
-        return None
+        return 'gray'
 
 
 class LatexOutputter:

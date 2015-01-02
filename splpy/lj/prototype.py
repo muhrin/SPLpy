@@ -78,7 +78,7 @@ def find_prototype(structure, db):
                         normalised_symmetry_precision(structure), -1)
 
     matcher = structure_matcher.StructureMatcher(primitive_cell=False, attempt_supercell=True)
-    transformations = create_transformations(structure)
+    transformed = [t.apply_transformation(structure) for t in create_transformations(structure)]
 
     # Loop over all prototypes with correct stoichiometry and spacegroup
     for entry in prototypes.find(
@@ -88,11 +88,9 @@ def find_prototype(structure, db):
         # Create the structure object for the prototype to compare against
         prototype = Structure.from_dict(entry["structure"])
 
-        for transformation in transformations:
-            structure_copy = transformation.apply_transformation(structure)
-
+        for trans in transformed:
             # Compare with structure matcher (volume and species agnostic)
-            if matcher.fit(prototype, structure_copy):
+            if matcher.fit(prototype, trans):
                 return entry['_id']
 
     return None
