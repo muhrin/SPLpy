@@ -2,7 +2,6 @@
 This module contains code relating to structure prototypes and their storage
 in the database
 """
-from splpy.util import normalised_symmetry_precision
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2014"
@@ -19,6 +18,8 @@ from pymatgen.symmetry.finder import SymmetryFinder
 import pymatgen.analysis.structure_matcher as structure_matcher
 
 import splpy.util
+from splpy.util import normalised_symmetry_precision
+import splpy.resio
 
 
 def create_prototype(structure):
@@ -32,11 +33,9 @@ def create_prototype(structure):
     # Scale the volume to be 1 unit per atom
     str_copy.scale_lattice(str_copy.num_sites)
 
-    sg = SymmetryFinder(str_copy,
-                        normalised_symmetry_precision(str_copy), -1)
-    str_copy = sg.get_conventional_standard_structure()
+    sg = SymmetryFinder(str_copy)
 
-    return str_copy
+    return sg.get_conventional_standard_structure()
 
 
 def create_transformations(structure):
@@ -74,8 +73,7 @@ def find_prototype(structure, db):
 
     structure = create_prototype(structure)
     # Find spacegroup
-    sg = SymmetryFinder(structure,
-                        normalised_symmetry_precision(structure), -1)
+    sg = SymmetryFinder(structure)
 
     matcher = structure_matcher.StructureMatcher(primitive_cell=False, attempt_supercell=True)
     transformed = [t.apply_transformation(structure) for t in create_transformations(structure)]
@@ -83,7 +81,8 @@ def find_prototype(structure, db):
     # Loop over all prototypes with correct stoichiometry and spacegroup
     for entry in prototypes.find(
             {"anonymous_formula": structure.composition.anonymized_formula,
-             "spacegroup.number": sg.get_spacegroup_number()}):
+             "spacegroup.number": sg.get_spacegroup_number(),
+             "nsites": structure.num_sites}):
 
         # Create the structure object for the prototype to compare against
         prototype = Structure.from_dict(entry["structure"])
