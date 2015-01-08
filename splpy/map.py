@@ -9,7 +9,7 @@ __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "Dec 30, 2014"
 
-
+import math
 import os
 import re
 
@@ -27,35 +27,42 @@ def parse_point(point):
 
 
 class MatplotlibOutputter:
-    def __init__(self, settings):
-        self.settings = settings
-
-    def out(self, map_file, output_name=None):
+    def out(self, map_file, output_name=None, settings=None):
         fig, ax = plt.subplots()
         output_file = output_name if output_name else "map"
-        output_file += ".eps"
+        output_file += ".pdf"
 
         line = map_file.readline()
         while line:
             line = line.rstrip(os.linesep)
             if line != '':
-                self.draw_face(ax, map_file, line)
+                self.draw_face(ax, map_file, line, settings)
             line = map_file.readline()
 
         ax.set_aspect('equal', 'box')
-        # Autoscale both x and y making them tight
-        ax.autoscale_view(True, True, True)
+        # Set the x and y range to be exactly the data limits
+        ax.set_xlim([ax.dataLim.xmin, ax.dataLim.xmax])
+        ax.set_ylim([ax.dataLim.ymin, ax.dataLim.ymax])
+
+        if settings:
+            if "title" in settings:
+                plt.title(settings["title"], fontsize=18)
+            if "xlabel" in settings:
+                plt.xlabel(settings["xlabel"], fontsize=17)
+            if "ylabel" in settings:
+                plt.ylabel(settings["ylabel"], fontsize=17)
+
         plt.draw()
-        plt.savefig(output_file, format='eps', bbox_inches='tight')
+        plt.savefig(output_file, bbox_inches='tight')
         plt.close()
 
-    def draw_face(self, axes, map_file, label):
+    def draw_face(self, axes, map_file, label, settings):
         line = map_file.readline().rstrip(os.linesep)
         if line == 'Points':
-            self.draw_points(map_file, label)
-            self.draw_path(axes, map_file, label)
+            self.draw_points(map_file, label, settings)
+            self.draw_path(axes, map_file, label, settings)
 
-    def draw_points(self, map_file, label):
+    def draw_points(self, map_file, label, settings):
 
         line = map_file.readline().rstrip(os.linesep)
         x = list()
@@ -69,9 +76,9 @@ class MatplotlibOutputter:
 
             line = map_file.readline().rstrip(os.linesep)
 
-        plt.scatter(x, y, color=self.get_property(label, 'color'), s=0.3, zorder=1)
+        plt.scatter(x, y, color=self.get_property(label, 'color', settings), s=0.3, zorder=1)
 
-    def draw_path(self, axes, map_file, label):
+    def draw_path(self, axes, map_file, label, settings):
         line = map_file.readline().rstrip(os.linesep)
         codes = list()
         coords = list()
@@ -104,18 +111,23 @@ class MatplotlibOutputter:
             line = map_file.readline().rstrip(os.linesep)
 
         face_path = mpath.Path(coords, codes, closed=True)
-        face_patch = mpatches.PathPatch(face_path, fill=False, color=self.get_property(label, 'color'))
+        face_patch = mpatches.PathPatch(face_path, fill=False, color='black', linewidth=0.5)
         axes.add_patch(face_patch)
 
         poly = Polygon(poly_coords)
-        rep_pt = poly.representative_point()
-        plt.text(rep_pt.x, rep_pt.y, label, horizontalalignment='center', verticalalignment='top')
+        if poly.is_valid and poly.area > 0.09:
+            rep_pt = poly.representative_point()
+            fontsize = min(28 * math.sqrt(poly.area) + 2.0, 22)
+            color = self.get_property(label, 'color', settings)
+            plt.text(rep_pt.x, rep_pt.y, label, size=fontsize,
+                     horizontalalignment='center', verticalalignment='center',
+                     bbox=dict(facecolor=color, edgecolor=color, boxstyle='round', alpha=0.75))
 
-    def get_property(self, label, prop):
-        if not self.settings or 'labels' not in self.settings:
+    def get_property(self, label, prop, settings):
+        if not settings or 'labels' not in settings:
             return None
 
-        all_properties = self.settings['labels']
+        all_properties = settings['labels']
         if label in all_properties:
             properties = all_properties[label]
             if prop in properties:
@@ -124,7 +136,7 @@ class MatplotlibOutputter:
 
 
 class LatexOutputter:
-    def out(self, map_file):
+    def out(self, map_file, settings):
         line = map_file.readline().rstrip(os.linesep)
         while line is not None:
             if line != '':
@@ -181,10 +193,10 @@ class LatexOutputter:
 
 def draw_map(map_file, outputter, settings=None, output_name=None):
     if outputter == 'matplotlib':
-        out = MatplotlibOutputter(settings)
+        out = MatplotlibOutputter()
     elif outputter == 'latex':
-        out = LatexOutputter(settings)
+        out = LatexOutputter()
     else:
         raise ValueError("Unknown map outputter: {}".format(outputter))
 
-    out.out(map_file, output_name)
+    out.out(map_file, output_name, settings)

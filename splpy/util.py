@@ -64,6 +64,12 @@ class OrderedPair(object):
 
 
 def create_structure_db_info(structure):
+    # Figure out the symmetry group
+    sg = SymmetryFinder(structure, normalised_symmetry_precision(structure), -1)
+    return create_structure_db_info_sg(structure, sg)
+
+
+def create_structure_db_info_sg(structure, sg):
     d = dict()
     # Set the composition and formulas for the system
     comp = structure.composition
@@ -77,8 +83,6 @@ def create_structure_db_info(structure):
               "nsites": comp.num_atoms,
               "chemsys": "-".join(sorted(el_amt.keys()))})
 
-    # Figure out the symmetry group
-    sg = SymmetryFinder(structure, normalised_symmetry_precision(structure), -1)
     d["spacegroup"] = {"symbol": unicode(sg.get_spacegroup_symbol(),
                                          errors="ignore"),
                        "number": sg.get_spacegroup_number(),

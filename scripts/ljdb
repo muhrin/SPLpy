@@ -20,6 +20,9 @@ import multiprocessing
 import os.path
 import StringIO
 import sys
+import yaml
+
+import bson.objectid
 
 import pymongo
 
@@ -55,6 +58,11 @@ def init_criteria(args):
     try:
         if args.stoichiometry:
             criteria['pretty_formula'] = args.stoichiometry.reduced_formula
+    except AttributeError:
+        pass
+    try:
+        if args.id:
+            criteria['_id'] = bson.objectid.ObjectId(args.id)
     except AttributeError:
         pass
 
@@ -321,7 +329,7 @@ def map_from_db(args):
 
         if n_toks > 1:
             species_pair = splpy.util.OrderedPair.from_string(tokens[-2])
-            latex.append("_{{{}{}}}".format(species_pair.first, species_pair.second))
+            latex.append("_\mathrm{{{}{}}}".format(species_pair.first, species_pair.second))
 
         latex.append("$")
         return ''.join(latex)
@@ -348,7 +356,7 @@ def map_from_db(args):
 
     # Find out which two parameters the user want to create the map from
     params_range = lj.db_query.LennardJonesSearchRange()
-    if criteria and "potential.params" in criteria:
+    if "potential.params" in criteria:
         params_range = lj.db_query.LennardJonesSearchRange.from_dict(criteria.pop("potential.params"))
 
     map_params = list()
@@ -356,10 +364,10 @@ def map_from_db(args):
         for param, value in interaction.__dict__.iteritems():
             if isinstance(value, splpy.interval.Interval):
                 map_params.append("potential.params.{}.{}".format(pair, param))
-
     if len(map_params) != 2:
         print("Criteria {} does not contain two parameter ranges!".format(args.criteria))
         sys.exit(-1)
+    map_params.sort()
 
     d = mgdb.util.get_settings(args.config_file)
     qe = LjQueryEngine(host=d["host"], port=d["port"], database=d["database"],
@@ -387,8 +395,15 @@ def map_from_db(args):
     ve.run_queries(getter, properties=properties, criteria=criteria)
     process_properties(args, lowest, qe)
 
-    # Put in the axes labels
-    params = ["-x {}".format(to_latex_string(map_params[0])), "-y {}".format(to_latex_string(map_params[1]))]
+    try:
+        with open(args.settings, 'r') as settings_file:
+            settings = yaml.load(settings_file)
+            # Put in the axes labels
+            settings.setdefault("xlabel", to_latex_string(map_params[0]))
+            settings.setdefault("ylabel", to_latex_string(map_params[1]))
+            #settings.setdefault("title", "{}, {}".format())
+    except AttributeError:
+        pass
 
     for formula, params_map in lowest.iteritems():
         filename = "{}.dat".format(formula)
@@ -398,12 +413,11 @@ def map_from_db(args):
             f.write("{},{},{}\n".format(doc[map_params[0]], doc[map_params[1]], doc[args.property]))
         f.close()
         args = ["smap", filename]
-        args.extend(params)
         proc = subprocess.Popen(args, stdout=subprocess.PIPE)
         output = StringIO.StringIO()
         output.write(proc.communicate()[0])
         output.seek(0, 0)
-        splpy.map.draw_map(output, 'matplotlib', output_name=str(formula))
+        splpy.map.draw_map(output, 'matplotlib', settings=settings, output_name=str(formula))
         output.close()
 
 
@@ -557,6 +571,8 @@ if __name__ == "__main__":
                            "{\"task_id\": 1}.")
     pget.add_argument("--collection", dest="collection", type=str, default=None, required=False,
                       help="The collection to get the structures from.")
+    pget.add_argument("--id", dest="id", type=str, default=None,
+                      help="id of the structure to retrieve.")
     pget.add_argument("--sort", dest="sort", type=str, default=[],
                       nargs='+', required=False,
                       help="Property to sort the query by")
@@ -587,6 +603,8 @@ if __name__ == "__main__":
                       required=False, help="Use this structure property to create the map from")
     pmap.add_argument("--stoich", dest="stoichiometry", type=Composition, default=None,
                       help="Search for structures with a particular stoichiometry e.g. AB2")
+    pmap.add_argument("--settings", dest="settings", type=str, default=None,
+                      help="A file defining settings for drawing the map (YAML format).")
     pmap.set_defaults(func=map_from_db)
 
     # The 'tag' subcommand

@@ -95,14 +95,25 @@ def find_prototype(structure, db):
     return None
 
 
+def get_wyckoff_sites(spacegroup):
+    class Counter(dict):
+        def __missing__(self, key):
+            return 0
+
+    wyckoff_sites = Counter()
+    for site in spacegroup.get_symmetry_dataset()['wyckoffs']:
+        wyckoff_sites[site] += 1
+    return wyckoff_sites
+
 def insert_prototype(structure, db):
     proto_id = find_prototype(structure, db)
     if proto_id:
         return proto_id, False
 
     prototype = create_prototype(structure)
-    d = {"structure": prototype.to_dict}
-    d.update(splpy.util.create_structure_db_info(prototype))
+    sg = SymmetryFinder(structure)
+    d = {"structure": prototype.to_dict, "wyckoff_sites": get_wyckoff_sites(sg)}
+    d.update(splpy.util.create_structure_db_info_sg(prototype, sg))
     proto_id = db['prototypes'].insert(d)
 
     return proto_id, True

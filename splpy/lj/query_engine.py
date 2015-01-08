@@ -158,10 +158,14 @@ class LjQueryEngine(QueryEngine):
             pass
 
         for key, value in criteria.iteritems():
-            if isinstance(value, str) and value.startswith("ObjectId"):
-                obj = bson.objectid.ObjectId(value[10:len(value) - 2])
-                # criteria.pop(value)
-                parsed_crit[key] = obj
+            try:
+                if value.startswith("ObjectId"):
+                    parsed_crit[key] = bson.objectid.ObjectId(value[10:len(value) - 2])
+            except AttributeError:
+                pass
+        # Remove the ones we've dealt with
+        for key in parsed_crit.keys():
+            criteria.pop(key)
 
         parsed_crit.update(super(LjQueryEngine, self)._parse_criteria(criteria))
         return parsed_crit
