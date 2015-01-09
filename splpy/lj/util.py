@@ -153,9 +153,6 @@ class LjInteractions(MSONable, Criteriable):
         return crit
 
 
-
-
-
 def add_to_criteria(crit, key, value):
     if key in crit:
         if not "$and" in crit:

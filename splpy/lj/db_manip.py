@@ -60,7 +60,7 @@ def insert_structure(db, structure, params, name, energy, pressure):
 
 
 def insert_structure_entry(db, entry, check_duplicates=True, update_duplicates=False):
-    if not "potential" in entry or not "params" in entry["potential"]:
+    if "potential" not in entry or not "params" in entry["potential"]:
         return False
 
     entry["last_updated"] = datetime.datetime.today()
@@ -71,7 +71,7 @@ def insert_structure_entry(db, entry, check_duplicates=True, update_duplicates=F
     params_info = ParamsInfo(db, entry["potential"]["params"])
 
     if check_duplicates:
-        if not LjDb.DUPLICATES_KEY in entry:
+        if LjDb.DUPLICATES_KEY not in entry:
             logger.error("Asked to check for duplicates on structure insert but duplicates key, {}, is missing".format(
                 LjDb.DUPLICATES_KEY))
             return
