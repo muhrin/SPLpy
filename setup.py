@@ -12,7 +12,7 @@ setup(
     description='SPLpy',
     author='Martin Uhrin',
     author_email='martin.uhrin.10@ucl.ac.uk',
-    version='0.1.0',
+    version='0.1.1',
     install_requires=['nose', 'pymatgen', 'pymatgen-db>=0.4.1', 'pymongo', 'matplotlib', 'shapely'],
     packages=find_packages(),
     classifiers=[

@@ -396,12 +396,13 @@ def map_from_db(args):
     process_properties(args, lowest, qe)
 
     try:
-        with open(args.settings, 'r') as settings_file:
-            settings = yaml.load(settings_file)
-            # Put in the axes labels
-            settings.setdefault("xlabel", to_latex_string(map_params[0]))
-            settings.setdefault("ylabel", to_latex_string(map_params[1]))
-            #settings.setdefault("title", "{}, {}".format())
+        if args.settings:
+            with open(args.settings, 'r') as settings_file:
+                settings = yaml.load(settings_file)
+                # Put in the axes labels
+                settings.setdefault("xlabel", to_latex_string(map_params[0]))
+                settings.setdefault("ylabel", to_latex_string(map_params[1]))
+                #settings.setdefault("title", "{}, {}".format())
     except AttributeError:
         pass
 
