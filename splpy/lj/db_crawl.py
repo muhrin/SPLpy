@@ -183,8 +183,9 @@ class Refine(object):
         relaxed_structures = list()
         for file in glob.glob(os.path.join(run_dir, '*.res')):
             res = resio.Res.from_file(file)
-            res.structure.splpy_res = res
-            relaxed_structures.append(res.structure)
+            if not _is_structure_bad(res.structure):
+                res.structure.splpy_res = res
+                relaxed_structures.append(res.structure)
         groups = self._matcher.group_structures(relaxed_structures)
 
         new_structures = list()
@@ -249,6 +250,14 @@ def assign_prototypes(params, query_engine):
         # Either get the prototype or insert this structure as a new one
         proto_id = prototype.insert_prototype(Structure.from_dict(structure_doc["structure"]), query_engine.db)[0]
         query_engine.collection.update({'_id': structure_doc['_id']}, {"$set": {'prototype_id': proto_id}})
+
+
+def _is_structure_bad(structure):
+    # Has the structure collapsed?
+    if structure.volume / len(structure) < 1e-2:
+        return True
+
+    return False
 
 
 def are_close_fraction(value1, value2, tolerance):
