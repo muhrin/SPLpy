@@ -4,6 +4,9 @@
 Module for helper functions and other things that don't fit neatly elsewhere.
 """
 
+import numpy as np
+from numpy import linalg as LA
+
 from pymatgen.symmetry.finder import SymmetryFinder
 
 
@@ -115,3 +118,20 @@ def init_logging(args, logger):
 def normalised_symmetry_precision(structure, precision=0.01):
     len_per_site = (structure.volume / structure.num_sites) ** 0.5
     return precision * len_per_site
+
+
+def is_structure_bad(structure):
+    # Has the structure exploded?
+    vol = structure.lattice.volume / len(structure)
+    if vol > 100000:
+        return True
+
+    # Has the structure collapsed?
+    lattice_mtx = structure.lattice.matrix
+    for row in lattice_mtx:
+        row /= LA.norm(row)
+    norm_vol = np.dot(lattice_mtx[0], np.cross(lattice_mtx[1], lattice_mtx[2])) / len(structure)
+    if norm_vol < 1e-2:
+        return True
+
+    return False

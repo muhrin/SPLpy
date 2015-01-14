@@ -270,11 +270,11 @@ def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_do
         for sg, docs in spacegroups.iteritems():
             strs = list()
             for doc in docs:
-                str = mg.Structure.from_dict(doc["structure"])
+                structure = mg.Structure.from_dict(doc["structure"])
                 # Store the document with the structure so we can use it later
                 if save_doc:
-                    str.splpy_doc = doc
-                strs.append(str)
+                    structure.splpy_doc = doc
+                strs.append(structure)
 
             groups = matcher.group_structures(strs)
             for group in groups:

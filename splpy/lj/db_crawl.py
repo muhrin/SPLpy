@@ -27,6 +27,8 @@ import splpy.lj.db_query as db_query
 import splpy.lj.prototype as prototype
 import splpy.lj.util
 import splpy.resio as resio
+import splpy.util as util
+import splpy.structure_matching
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +112,7 @@ class Prune(object):
 
         doc1 = structure1.splpy_doc
         doc2 = structure2.splpy_doc
-        if doc1["spacegroup"] != doc2["spacegroup"]:
+        if doc1["spacegroup"]["number"] != doc2["spacegroup"]["number"]:
             return False
         # Check the two energies are within the fractional energy tolerance
         if not are_close_fraction(doc1["energy"], doc2["energy"], energy_tolerance):
@@ -138,7 +140,7 @@ class Refine(object):
             logger.error("spipe not found, can't refine database.")
             self.found_spipe = False
 
-        self._matcher = structure_matcher.StructureMatcher()
+        self._matcher = structure_matcher.StructureMatcher(comparator=splpy.structure_matching.SymmetryComparator())
 
     def __call__(self, params_doc, query_engine):
         if not self.found_spipe:
@@ -183,7 +185,7 @@ class Refine(object):
         relaxed_structures = list()
         for file in glob.glob(os.path.join(run_dir, '*.res')):
             res = resio.Res.from_file(file)
-            if not _is_structure_bad(res.structure):
+            if not util.is_structure_bad(res.structure):
                 res.structure.splpy_res = res
                 relaxed_structures.append(res.structure)
         groups = self._matcher.group_structures(relaxed_structures)
@@ -250,14 +252,6 @@ def assign_prototypes(params, query_engine):
         # Either get the prototype or insert this structure as a new one
         proto_id = prototype.insert_prototype(Structure.from_dict(structure_doc["structure"]), query_engine.db)[0]
         query_engine.collection.update({'_id': structure_doc['_id']}, {"$set": {'prototype_id': proto_id}})
-
-
-def _is_structure_bad(structure):
-    # Has the structure collapsed?
-    if structure.volume / len(structure) < 1e-2:
-        return True
-
-    return False
 
 
 def are_close_fraction(value1, value2, tolerance):
