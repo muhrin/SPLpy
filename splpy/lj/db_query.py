@@ -21,6 +21,7 @@ import splpy.interval as interval
 import splpy.lj.db_query
 import splpy.lj.util as util
 from splpy.lj.util import Criteriable
+import splpy.util
 
 
 class InteractionRange(Criteriable):
@@ -271,10 +272,11 @@ def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_do
             strs = list()
             for doc in docs:
                 structure = mg.Structure.from_dict(doc["structure"])
-                # Store the document with the structure so we can use it later
-                if save_doc:
-                    structure.splpy_doc = doc
-                strs.append(structure)
+                if not splpy.util.is_structure_bad(structure):
+                    # Store the document with the structure so we can use it later
+                    if save_doc:
+                        structure.splpy_doc = doc
+                    strs.append(structure)
 
             groups = matcher.group_structures(strs)
             for group in groups:
