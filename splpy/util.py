@@ -12,6 +12,7 @@ from pymatgen.symmetry.finder import SymmetryFinder
 
 from splpy.resio import Res
 
+
 def find_or_create(collection, query, update, **kwargs):
     return collection.find_and_modify(query, {"$setOnInsert": update}, upsert=True, new=True, **kwargs)
 
@@ -123,6 +124,13 @@ def normalised_symmetry_precision(structure, precision=0.01):
 
 
 def is_structure_bad(structure):
+    # Check for max ratio between lattice parameters
+    abc = structure.lattice.abc
+    for i in range(0, 3):
+        for j in range(i + 1, 3):
+            if (max(abc[i], abc[j]) / min(abc[i], abc[j])) > 1000:
+                return True
+
     # Has the structure exploded?
     vol = structure.lattice.volume / len(structure)
     if vol > 100000:

@@ -86,7 +86,7 @@ class LjInteraction(MSONable, Criteriable):
         return [self.epsilon, self.sigma, self.m, self.n, self.cut]
 
     @classmethod
-    def from_dict(self, d):
+    def from_dict(cls, d):
         return LjInteraction(d["epsilon"], d["sigma"], d["m"], d["n"], d["cut"])
 
     def to_criteria(self):
