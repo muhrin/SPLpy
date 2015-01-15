@@ -188,7 +188,13 @@ class Refine(object):
             if not util.is_structure_bad(res.structure):
                 res.structure.splpy_res = res
                 relaxed_structures.append(res.structure)
-        groups = self._matcher.group_structures(relaxed_structures)
+        try:
+            groups = self._matcher.group_structures(relaxed_structures)
+        except MemoryError:
+            # Sometimes matcher runs out of memory if it tried to handle a structure that has
+            # many nearest neighbour interactions (e.g. a skewed cell)
+            print("Memory error trying to match structures, skpping this parameter point.")
+            return
 
         new_structures = list()
         for group in groups:

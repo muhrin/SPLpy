@@ -274,13 +274,16 @@ def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_do
                 structure = mg.Structure.from_dict(doc["structure"])
                 if not splpy.util.is_structure_bad(structure):
                     # Store the document with the structure so we can use it later
-                    if save_doc:
-                        structure.splpy_doc = doc
+                    structure.splpy_doc = doc
                     strs.append(structure)
-
-            groups = matcher.group_structures(strs)
-            for group in groups:
-                unique.append(group[0])
+            try:
+                groups = matcher.group_structures(strs)
+                for group in groups:
+                    unique.append(group[0])
+            except MemoryError:
+                print("Ran out of memory trying to compare structures, can't get unique.")
+                print("Bad structures saved to local folder.")
+                splpy.util.write_structures(strs, [structure.splpy_doc["_id"] for structure in strs])
 
     return unique
 

@@ -7,8 +7,10 @@ Module for helper functions and other things that don't fit neatly elsewhere.
 import numpy as np
 from numpy import linalg as LA
 
+import pymatgen as mg
 from pymatgen.symmetry.finder import SymmetryFinder
 
+from splpy.resio import Res
 
 def find_or_create(collection, query, update, **kwargs):
     return collection.find_and_modify(query, {"$setOnInsert": update}, upsert=True, new=True, **kwargs)
@@ -135,3 +137,12 @@ def is_structure_bad(structure):
         return True
 
     return False
+
+
+def write_structures(structures, names):
+    str_list = [structures] if isinstance(structures, mg.Structure) else structures
+    names_list = [names] if isinstance(names, str) else names
+
+    for structure, name in zip(str_list, names_list):
+        res = Res(structure)
+        res.write_file("{}.res".format(name))

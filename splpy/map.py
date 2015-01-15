@@ -21,6 +21,7 @@ from shapely.geometry import Polygon
 
 OUTPUTTERS = ['matplotlib', 'latex']
 
+
 def parse_point(point):
     nums = point[1:-1].split(',')
     return float(nums[0]), float(nums[1])
@@ -119,20 +120,35 @@ class MatplotlibOutputter:
             rep_pt = poly.representative_point()
             fontsize = min(28 * math.sqrt(poly.area) + 2.0, 22)
             color = self.get_property(label, 'color', settings)
-            plt.text(rep_pt.x, rep_pt.y, label, size=fontsize,
+            plt.text(rep_pt.x, rep_pt.y, self.get_label_string(label, settings), size=fontsize,
                      horizontalalignment='center', verticalalignment='center',
                      bbox=dict(facecolor=color, edgecolor=color, boxstyle='round', alpha=0.75))
 
     def get_property(self, label, prop, settings):
-        if not settings or 'labels' not in settings:
-            return None
+        value = None
 
-        all_properties = settings['labels']
-        if label in all_properties:
-            properties = all_properties[label]
-            if prop in properties:
-                return properties[prop]
-        return 'gray'
+        if settings and 'labels' in settings:
+            all_properties = settings['labels']
+            if label in all_properties:
+                properties = all_properties[label]
+                if prop in properties:
+                    value = properties[prop]
+
+        # Defaults
+        if not value:
+            if prop == 'color':
+                value = 'gray'
+
+        return value
+
+    def get_label_string(self, label, settings):
+        label_str = self.get_property(label, 'latex_label', settings)
+
+        # Default
+        if not label_str:
+            label_str = label
+
+        return label_str
 
 
 class LatexOutputter:

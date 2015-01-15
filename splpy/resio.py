@@ -166,7 +166,6 @@ class Res(MSONable):
         return Res(Structure(Lattice.from_lengths_and_angles(abc, ang), sp, coords), info.get('name'),
                    info.get('pressure'), info.get('energy'), info.get('spacegroup'), info.get('times_found'))
 
-
     def get_string(self, significant_figures=6):
         """
         Returns a string to be written as a Res file.
