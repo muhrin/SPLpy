@@ -13,6 +13,7 @@ __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "July 23, 2014"
 
 import bson.objectid
+import pymongo
 
 from matgendb.query_engine import QueryEngine
 
@@ -147,6 +148,27 @@ class LjQueryEngine(QueryEngine):
             all_entries.append(entry)
 
         return all_entries
+
+    def get_structures(self, params, criteria=None, limit=None, sort_by=None, save_doc=True):
+        properties = ["_id", "name", "times_found", "energy", "spacegroup.symbol", "spacegroup.number", "pressure",
+              "structure", "pretty_formula"]
+
+        crit = criteria if criteria else dict()
+
+        structures = list()
+        for param_id, cur in self.query_at_each_param_point(params, properties, crit):
+            if sort_by:
+                cur.sort(sort_by, pymongo.ASCENDING)
+            if limit:
+                cur.limit(limit)
+
+            for doc in cur:
+                structure = Structure.from_dict(doc['structure'])
+                if save_doc:
+                    structure.splpy_doc = doc
+                structures.append(structure)
+
+        return structures
 
     def _parse_criteria(self, criteria):
         parsed_crit = dict()

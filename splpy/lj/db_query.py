@@ -229,29 +229,47 @@ def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_do
     be either an LjInteractions or a InteractionRange.
     """
     class LowestEnergyStore:
-        def __init__(self, lowest, limit):
+        def __init__(self, lowest, matcher, limit):
             self.lowest = lowest
+            self.matcher = matcher
             self.limit = limit
 
         def __call__(self, results):
             results.sort('energy', pymongo.ASCENDING)
-            if self.limit is not None:
-                results.limit(self.limit)
+
+            num_kept = 0
             for doc in results:
                 formula = doc["pretty_formula"]
                 spacegroup = doc["spacegroup.number"]
 
-                formula_dict = self.lowest.get(formula)
-                if formula_dict is None:
-                    formula_dict = dict()
-                    self.lowest[formula] = formula_dict
+                formula_dict = self.lowest.setdefault(formula, dict())
+                entries = formula_dict.setdefault(spacegroup, list())
 
-                entries = formula_dict.get(spacegroup)
-                if entries is None:
-                    entries = list()
-                    formula_dict[spacegroup] = entries
+                structure = mg.Structure.from_dict(doc["structure"])
+                if not splpy.util.is_structure_bad(structure):
+                    # Store the document with the structure so we can use it later
+                    structure.splpy_doc = doc
 
-                entries.append(doc)
+                    # Check if we've seen this structure before
+                    keep = True
+                    for entry in entries:
+                        try:
+                            if matcher.fit(entry, structure):
+                                keep = False
+                                break
+                        except MemoryError:
+                            print("Ran out of memory trying to compare structures, can't get unique.")
+                            print("Bad structures saved to local folder.")
+                            splpy.util.write_structures(structure, [structure.splpy_doc["_id"] for structure in strs])
+                            keep = False
+                            break
+
+                    if keep:
+                        entries.append(structure)
+                        num_kept += 1
+
+                if self.limit and num_kept > self.limit:
+                    break
 
     properties = ["_id", "name", "times_found", "energy", "spacegroup.symbol", "spacegroup.number", "pressure",
                   "structure", "pretty_formula"]
@@ -262,28 +280,14 @@ def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_do
     ve.add(splpy.lj.db_query.visit_distinct_formulae)
 
     lowest = dict()
-    getter = LowestEnergyStore(lowest, limit)
+    getter = LowestEnergyStore(lowest, matcher, limit)
     ve.run_queries(getter, properties=properties, criteria=crit)
 
     unique = list()
     while len(lowest) > 0:
         formula, spacegroups = lowest.popitem()
-        for sg, docs in spacegroups.iteritems():
-            strs = list()
-            for doc in docs:
-                structure = mg.Structure.from_dict(doc["structure"])
-                if not splpy.util.is_structure_bad(structure):
-                    # Store the document with the structure so we can use it later
-                    structure.splpy_doc = doc
-                    strs.append(structure)
-            try:
-                groups = matcher.group_structures(strs)
-                for group in groups:
-                    unique.append(group[0])
-            except MemoryError:
-                print("Ran out of memory trying to compare structures, can't get unique.")
-                print("Bad structures saved to local folder.")
-                splpy.util.write_structures(strs, [structure.splpy_doc["_id"] for structure in strs])
+        for sg, structures in spacegroups.iteritems():
+            unique.extend(structures)
 
     return unique
 
