@@ -126,13 +126,16 @@ class Refine(object):
         self.spipe_input = spipe_input
         self.dist = dist
         self.limit = limit
+
+        if not os.path.exists(self.spipe_input):
+            print("Error: {} does not exist.".format(self.spipe_input))
+
         # Check if spipe is installed
         try:
             from subprocess import DEVNULL  # py3k
         except ImportError:
-            import os
-
             DEVNULL = open(os.devnull, 'wb')
+
         try:
             subprocess.call(["spipe", "--help"], stdout=DEVNULL)
             self.found_spipe = True
@@ -140,7 +143,8 @@ class Refine(object):
             logger.error("spipe not found, can't refine database.")
             self.found_spipe = False
 
-        self._matcher = structure_matcher.StructureMatcher(comparator=splpy.structure_matching.SymmetryComparator())
+        # self._matcher = structure_matcher.StructureMatcher(comparator=splpy.structure_matching.SymmetryComparator())
+        self._matcher = structure_matcher.StructureMatcher(primitive_cell=False)
 
     def __call__(self, params_doc, query_engine):
         if not self.found_spipe:
@@ -157,11 +161,16 @@ class Refine(object):
         surrounding_structures = db_query.get_unique(query_engine, params_range, self._matcher,
                                                      criteria={"potential.params_id": {"$ne": params_id}},
                                                      limit=self.limit)
+        # surrounding_structures = query_engine.get_structures(params_range,
+        # criteria={"potential.params_id": {"$ne": params_id}},
+        #                                                      sort_by='energy',
+        #                                                      limit=self.limit,
+        #                                                      save_doc=True)
 
         # Cull uniques that are the same as any of my structures
         for my in my_structures:
             for surrounding in surrounding_structures:
-                if self._matcher.fit(my, surrounding):
+                if util.is_structure_bad(surrounding) or self._matcher.fit(my, surrounding):
                     surrounding_structures.remove(surrounding)
                     break
 
@@ -172,11 +181,11 @@ class Refine(object):
             logger.error("Failed to create temporary directory to run spipe")
             return
 
-        self._prepare_spipe_files(params, surrounding_structures, run_dir)
+        spipe_input = self._prepare_spipe_files(params, surrounding_structures, run_dir)
         del surrounding_structures[:]
 
         # Run spipe
-        subprocess.Popen(["spipe", str(self.spipe_input)], cwd=run_dir).wait()
+        subprocess.Popen(["spipe", spipe_input], cwd=run_dir).wait()
 
         # Cull any structures that have relaxed to one of mine
 
@@ -188,23 +197,41 @@ class Refine(object):
             if not util.is_structure_bad(res.structure):
                 res.structure.splpy_res = res
                 relaxed_structures.append(res.structure)
-        try:
-            groups = self._matcher.group_structures(relaxed_structures)
-        except MemoryError:
-            # Sometimes matcher runs out of memory if it tried to handle a structure that has
-            # many nearest neighbour interactions (e.g. a skewed cell)
-            print("Memory error trying to match structures, skpping this parameter point.")
-            return
 
         new_structures = list()
-        for group in groups:
-            unique = True
+        while relaxed_structures:
+            relaxed = relaxed_structures.pop()
+
+            keep = True
+            # Check if it's the same as any of the structures at this parameter point already
             for my in my_structures:
-                if self._matcher.fit(my, group[0]):
-                    unique = False
-                    break
-            if unique:
-                new_structures.append(group[0])
+                if are_close_fraction(relaxed.splpy_res.energy, my.splpy_doc['energy'], 1e-2):
+                    try:
+                        if self._matcher.fit(relaxed, my):
+                            keep = False
+                            break
+                    except MemoryError:
+                        # Sometimes matcher runs out of memory if it tried to handle a structure that has
+                        # many nearest neighbour interactions (e.g. a skewed cell)
+                        print("Memory error trying to match structures.")
+                        keep = False
+
+            if keep:
+                # Check if it's the same as any of the other relaxed structures
+                for unique in new_structures:
+                    if are_close_fraction(relaxed.splpy_res.energy, unique.splpy_res.energy, 1e-2):
+                        try:
+                            if self._matcher.fit(relaxed, unique):
+                                keep = False
+                                break
+                        except MemoryError:
+                            # Sometimes matcher runs out of memory if it tried to handle a structure that has
+                            # many nearest neighbour interactions (e.g. a skewed cell)
+                            print("Memory error trying to match structures.")
+                            keep = False
+
+            if keep:
+                new_structures.append(relaxed)
 
         logger.info("Found {} new structures at parameter point {}".format(len(new_structures), params_id))
 
@@ -228,13 +255,16 @@ class Refine(object):
             res.write_file(os.path.join(structures_dir, "{}.res".format(doc["_id"])))
 
         # Write the spipe yaml file for the run
-        with open(os.path.join(dir, self.spipe_input), 'w') as outfile:
+        spipe_input = os.path.basename(self.spipe_input)
+        with open(os.path.join(dir, spipe_input), 'w') as outfile:
             spipe_settings = dict()
             if os.path.exists(self.spipe_input):
                 with open(self.spipe_input, 'r') as original:
                     spipe_settings = yaml.load(original)
             self._update_spipe_dict(params, "unique", spipe_settings)
             outfile.write(yaml.dump(spipe_settings))
+
+        return spipe_input
 
     def _update_spipe_dict(self, params, structures_dir, d):
         d["loadStructures"] = structures_dir
@@ -254,7 +284,6 @@ def assign_prototypes(params, query_engine):
     for structure_doc in query_engine.query(
             criteria={"potential.params_id": params["_id"], "prototype_id": {"$exists": 0}},
             properties=["_id", "structure"]):
-
         # Either get the prototype or insert this structure as a new one
         proto_id = prototype.insert_prototype(Structure.from_dict(structure_doc["structure"]), query_engine.db)[0]
         query_engine.collection.update({'_id': structure_doc['_id']}, {"$set": {'prototype_id': proto_id}})
