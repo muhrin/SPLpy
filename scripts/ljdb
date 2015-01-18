@@ -122,7 +122,7 @@ def crawl_db(args):
     if args.prune:
         functions.append(db_crawl.Prune())
     if args.refine:
-        functions.append(db_crawl.Refine(args.refine, args.refine_dist))
+        functions.append(db_crawl.Refine(args.refine, args.refine_dist, args.refine_limit))
     if args.prototype:
         functions.append(db_crawl.assign_prototypes)
 
@@ -402,7 +402,7 @@ def map_from_db(args):
                 # Put in the axes labels
                 settings.setdefault("xlabel", to_latex_string(map_params[0]))
                 settings.setdefault("ylabel", to_latex_string(map_params[1]))
-                #settings.setdefault("title", "{}, {}".format())
+                # settings.setdefault("title", "{}, {}".format())
     except AttributeError:
         pass
 
@@ -496,6 +496,8 @@ if __name__ == "__main__":
                              "points in all parameter directions.  Takes the spipe yaml input as argument.")
     pcrawl.add_argument("--refine-dist", dest="refine_dist", type=float, default=0.1,
                         help="The distance away from each parameter point to refine to.")
+    pcrawl.add_argument("--refine-limit", dest="refine_limit", type=int, default=None,
+                        help="The number of top unique structure to take from each surrounding parameter point for refinement.")
     pcrawl.add_argument("--crit", dest="criteria", type=str, default=None,
                         help="Confine the crawl to entries matching this criteria "
                              "{\"pretty_formula\": \"AB\"}.")
