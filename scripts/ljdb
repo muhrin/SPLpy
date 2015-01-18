@@ -395,6 +395,7 @@ def map_from_db(args):
     ve.run_queries(getter, properties=properties, criteria=criteria)
     process_properties(args, lowest, qe)
 
+    settings = None
     try:
         if args.settings:
             with open(args.settings, 'r') as settings_file:
