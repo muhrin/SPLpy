@@ -46,7 +46,7 @@ from splpy.lj.query_engine import LjQueryEngine
 from splpy.lj.db_query import VisitationEngine
 import splpy.lj.db_crawl as db_crawl
 
-_log = logging.getLogger("lj")  # parent
+_log = logging.getLogger(__name__)
 
 
 # Genetic stuff that's common too all query types
@@ -310,7 +310,6 @@ def map_from_db(args):
                         # Use the spacegroup as a fallback
                         doc["prototype"] = doc["spacegroup.symbol"]
 
-
     def to_latex_string(interaction_string):
         tokens = interaction_string.split('.')
 
@@ -413,8 +412,7 @@ def map_from_db(args):
         for doc in params_map.itervalues():
             f.write("{},{},{}\n".format(doc[map_params[0]], doc[map_params[1]], doc[args.property]))
         f.close()
-        args = ["smap", filename]
-        proc = subprocess.Popen(args, stdout=subprocess.PIPE)
+        proc = subprocess.Popen(["smap", filename], stdout=subprocess.PIPE)
         output = StringIO.StringIO()
         output.write(proc.communicate()[0])
         output.seek(0, 0)

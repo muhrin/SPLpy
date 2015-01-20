@@ -41,6 +41,27 @@ def update_prototypes(args):
         for proto_id, entry in update.iteritems():
             protos.update({'_id': bson.objectid.ObjectId(proto_id)}, {"$set": entry})
 
+
+def dump_prototypes(args):
+    d = mgdb.util.get_settings(args.config_file)
+    qe = LjQueryEngine(host=d["host"], port=d["port"], database=d["database"],
+                       user=d["readonly_user"], password=d["readonly_password"],
+                       collection=args.collection, aliases_config=d.get("aliases_config", None))
+
+    properties = ["structure_type", "pearson", "strukturbericht"]
+
+    with open(args.prototypes_file, 'w') as prototypes_file:
+        # Look for prototypes that have these properties
+        crit = {"$or": [{p: {"$exists": True}} for p in properties]}
+
+        protos = qe.db[args.collection]
+
+        results = dict()
+        for doc in protos.find(crit, fields=properties):
+            results[str(doc.pop("_id"))] = doc
+
+        yaml.safe_dump(results, prototypes_file, default_flow_style=False)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="""
     proto is a command line utility to interact with the prototypes collection
@@ -69,6 +90,13 @@ if __name__ == "__main__":
 
     # Init for all subparsers.
     subparsers = parser.add_subparsers()
+
+    # The 'dump' subcommand
+    pdump = subparsers.add_parser("dump", help="Dump the currently stored prototypes into YAML file.",
+                                  parents=[parent_vb, parent_cfg])
+    pdump.add_argument("-o", dest="prototypes_file", type=str, default="prototypes.yaml",
+                       help="File to save the prototypes to.")
+    pdump.set_defaults(func=dump_prototypes)
 
     # The 'update' subcommand.
     pupdate = subparsers.add_parser("update",

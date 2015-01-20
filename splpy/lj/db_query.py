@@ -12,6 +12,7 @@ __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "Jul 16, 2014"
 
 import copy
+import logging
 
 import pymongo
 
@@ -22,6 +23,8 @@ import splpy.lj.db_query
 import splpy.lj.util as util
 from splpy.lj.util import Criteriable
 import splpy.util
+
+logger = logging.getLogger(__name__)
 
 
 class InteractionRange(Criteriable):
@@ -258,9 +261,9 @@ def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_do
                                 keep = False
                                 break
                         except MemoryError:
-                            print("Ran out of memory trying to compare structures, can't get unique.")
-                            print("Bad structures saved to local folder.")
-                            splpy.util.write_structures(structure, [structure.splpy_doc["_id"] for structure in strs])
+                            logger.error("Ran out of memory trying to compare structures, can't get unique.")
+                            splpy.util.write_structures(structure, doc["_id"])
+                            logger.info("Bad structures saved to local folder.")
                             keep = False
                             break
 
@@ -276,7 +279,9 @@ def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_do
 
     crit = criteria if criteria else dict()
     ve = VisitationEngine(query_engine)
-    ve.add(splpy.lj.db_query.VisitParamPoints(params))
+    params_visitor = splpy.lj.db_query.VisitParamPoints(params)
+    logger.debug("Visiting {} param points".format(params_visitor.num_points(query_engine)))
+    ve.add(params_visitor)
     ve.add(splpy.lj.db_query.visit_distinct_formulae)
 
     lowest = dict()

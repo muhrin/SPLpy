@@ -117,6 +117,11 @@ def init_logging(args, logger):
         lvl = (logging.WARN, logging.INFO, logging.DEBUG)[min(args.vb, 2)]
     logger.setLevel(lvl)
 
+    # Log things from the splpy library
+    splpy_logger = logging.getLogger("splpy")
+    splpy_logger.addHandler(hndlr)
+    splpy_logger.setLevel(lvl)
+
 
 def normalised_symmetry_precision(structure, precision=0.01):
     len_per_site = (structure.volume / structure.num_sites) ** 0.5

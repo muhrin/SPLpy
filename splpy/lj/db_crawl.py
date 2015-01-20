@@ -97,7 +97,7 @@ class Prune(object):
                 for duplicate in duplicates:
                     duplicate["duplicate_of"] = ref.splpy_doc["_id"]
 
-                if len(duplicates) > 0:
+                if duplicates:
                     logger.info(
                         "Found {} duplicates of structure with id {}".format(len(duplicates), ref.splpy_doc["_id"]))
                     structures_coll.remove({"_id": {"$in": [s["_id"] for s in duplicates]}})
@@ -163,9 +163,10 @@ class Refine(object):
                                                      limit=self.limit)
         # surrounding_structures = query_engine.get_structures(params_range,
         # criteria={"potential.params_id": {"$ne": params_id}},
-        #                                                      sort_by='energy',
-        #                                                      limit=self.limit,
-        #                                                      save_doc=True)
+        # sort_by='energy',
+        # limit=self.limit,
+        # save_doc=True)
+        logger.debug("Found {} unique surrounding structures".format(len(surrounding_structures)))
 
         # Cull uniques that are the same as any of my structures
         for my in my_structures:
@@ -173,6 +174,9 @@ class Refine(object):
                 if util.is_structure_bad(surrounding) or self._matcher.fit(my, surrounding):
                     surrounding_structures.remove(surrounding)
                     break
+
+        logger.debug("{} unique surrounding structure(s) left after excluding those at this param point".
+                     format(len(surrounding_structures)))
 
         # Run spipe on remaining unique structures
         try:
@@ -213,7 +217,7 @@ class Refine(object):
                     except MemoryError:
                         # Sometimes matcher runs out of memory if it tried to handle a structure that has
                         # many nearest neighbour interactions (e.g. a skewed cell)
-                        print("Memory error trying to match structures.")
+                        logger.error("Memory error trying to match structures.")
                         keep = False
 
             if keep:
@@ -227,7 +231,7 @@ class Refine(object):
                         except MemoryError:
                             # Sometimes matcher runs out of memory if it tried to handle a structure that has
                             # many nearest neighbour interactions (e.g. a skewed cell)
-                            print("Memory error trying to match structures.")
+                            logger.error("Memory error trying to match structures.")
                             keep = False
 
             if keep:
@@ -290,4 +294,11 @@ def assign_prototypes(params, query_engine):
 
 
 def are_close_fraction(value1, value2, tolerance):
-    return (value1 - value2) / value1 < tolerance and (value1 - value2) / value2 < tolerance
+    # Guard against one or both value 1/2 being zero (because we divide later on)
+    if value1 == 0 and value2 == 0:
+        return True
+    else:
+        if value1 == 0 or value2 == 0:
+            return False
+        return abs(value1 - value2) / abs(value1) < tolerance and \
+               abs(value1 - value2) / abs(value2) < tolerance
