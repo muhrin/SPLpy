@@ -328,12 +328,16 @@ class Refine(object):
 
 def assign_prototypes(params, query_engine):
     # Assign prototypes to all the structures at this parameter point that do not have a prototype
-    for structure_doc in query_engine.query(
+    for doc in query_engine.query(
             criteria={"potential.params_id": params["_id"], "prototype_id": {"$exists": 0}},
             properties=["_id", "structure"]):
         # Either get the prototype or insert this structure as a new one
-        proto_id = prototype.insert_prototype(Structure.from_dict(structure_doc["structure"]), query_engine.db)[0]
-        query_engine.collection.update({'_id': structure_doc['_id']}, {"$set": {'prototype_id': proto_id}})
+        structure = Structure.from_dict(doc["structure"])
+        if not splpy.util.is_structure_bad(structure):
+            proto_id = prototype.insert_prototype(structure, query_engine.db)[0]
+            query_engine.collection.update({'_id': doc['_id']}, {"$set": {'prototype_id': proto_id}})
+        else:
+            logger.info("Skipping structure {} because there is something wrong with it.".format(doc["_id"]))
 
 
 def are_close_fraction(value1, value2, tolerance):

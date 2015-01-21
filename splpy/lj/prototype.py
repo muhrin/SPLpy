@@ -11,6 +11,7 @@ __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "Dec 22, 2014"
 
 import itertools
+import logging
 
 from pymatgen.core import Structure
 from pymatgen.transformations.standard_transformations import SubstitutionTransformation
@@ -22,6 +23,8 @@ from splpy.util import normalised_symmetry_precision
 import splpy.resio
 
 COLLECTION_NAME = 'prototypes'
+
+logger = logging.getLogger(__name__)
 
 
 def create_prototype(structure):
