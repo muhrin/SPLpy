@@ -20,8 +20,6 @@ from bson.objectid import ObjectId
 from pymatgen.symmetry.finder import SymmetryFinder
 
 import splpy.util
-import splpy.lj.util as util
-
 
 logger = logging.getLogger(__name__)
 
@@ -106,11 +104,11 @@ def insert_structure_entry(db, entry, check_duplicates=True, update_duplicates=F
 
 
 def _generate_entry(structure, params, name, energy, pressure):
-    entry = {"structure": structure.to_dict, "name": name, "energy": energy, "pressure": pressure,
-             "potential": {"name": "lennard_jones", "params": params.to_dict}}
+    comp = structure.composition
+    entry = {"structure": structure.to_dict, "name": name, "energy": energy, "energy_per_site": energy / comp.num_atoms,
+             "pressure": pressure, "potential": {"name": "lennard_jones", "params": params.to_dict}}
 
     # Set the composition and formulas for the system
-    comp = structure.composition
     el_amt = comp.get_el_amt_dict()
     entry.update({"unit_cell_formula": comp.to_dict,
                   "reduced_cell_formula": comp.to_reduced_dict,

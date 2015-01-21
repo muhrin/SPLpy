@@ -115,7 +115,8 @@ class Prune(object):
         if doc1["spacegroup"]["number"] != doc2["spacegroup"]["number"]:
             return False
         # Check the two energies are within the fractional energy tolerance
-        if not are_close_fraction(doc1["energy"], doc2["energy"], energy_tolerance):
+        if not are_close_fraction(doc1["energy"] / len(structure1), doc2["energy"] / len(structure2),
+                                  energy_tolerance):
             return False
 
         return self.matcher.fit(structure1, structure2)

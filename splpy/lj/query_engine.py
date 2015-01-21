@@ -150,8 +150,8 @@ class LjQueryEngine(QueryEngine):
         return all_entries
 
     def get_structures(self, params, criteria=None, limit=None, sort_by=None, save_doc=True):
-        properties = ["_id", "name", "times_found", "energy", "spacegroup.symbol", "spacegroup.number", "pressure",
-              "structure", "pretty_formula"]
+        properties = ["_id", "name", "times_found", "energy", "energy_per_size", "spacegroup.symbol",
+                      "spacegroup.number", "pressure", "structure", "pretty_formula"]
 
         crit = criteria if criteria else dict()
 

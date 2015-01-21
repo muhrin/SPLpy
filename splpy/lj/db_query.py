@@ -120,7 +120,6 @@ class InteractionRange(Criteriable):
 
 
 class LennardJonesSearchRange(object):
-
     def __init__(self):
         self.interactions = dict()
 
@@ -231,6 +230,7 @@ def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_do
     Get the unique structures at a parameter point or points.  The params parameter can
     be either an LjInteractions or a InteractionRange.
     """
+
     class LowestEnergyStore:
         def __init__(self, lowest, matcher, limit):
             self.lowest = lowest
@@ -238,7 +238,7 @@ def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_do
             self.limit = limit
 
         def __call__(self, results):
-            results.sort('energy', pymongo.ASCENDING)
+            results.sort('energy_per_site', pymongo.ASCENDING)
 
             num_kept = 0
             for doc in results:
@@ -273,9 +273,10 @@ def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_do
 
                 if self.limit and num_kept > self.limit:
                     break
+
     props = properties if properties else list()
-    props.extend(["_id", "name", "times_found", "energy", "spacegroup.symbol", "spacegroup.number", "pressure",
-                  "structure", "pretty_formula"])
+    props.extend(["_id", "name", "times_found", "energy", "energy_per_site", "spacegroup.symbol", "spacegroup.number",
+                  "pressure", "structure", "pretty_formula"])
 
     crit = criteria if criteria else dict()
     ve = VisitationEngine(query_engine)

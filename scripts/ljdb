@@ -208,7 +208,7 @@ def get_unique_from_db(args):
             self.limit = limit
 
         def __call__(self, results):
-            results.sort('energy', pymongo.ASCENDING)
+            results.sort('energy_per_site', pymongo.ASCENDING)
             if self.limit is not None:
                 results.limit(self.limit)
             for doc in results:
@@ -232,8 +232,8 @@ def get_unique_from_db(args):
                        user=d["readonly_user"], password=d["readonly_password"],
                        collection=d["collection"], aliases_config=d.get("aliases_config", None))
 
-    properties = ["_id", "name", "times_found", "energy", "spacegroup.symbol", "spacegroup.number", "pressure",
-                  "structure", "pretty_formula"]
+    properties = ["_id", "name", "times_found", "energy", "energy_per_site", "spacegroup.symbol", "spacegroup.number",
+                  "pressure", "structure", "pretty_formula"]
 
     criteria = init_criteria(args)
 
@@ -337,7 +337,7 @@ def map_from_db(args):
         def __call__(self, results):
             # This is a bid dodgy (using private function), but QueryResults can't handle
             # calling through to Cursor methods properly (and not loose its identity)
-            doc = results._mapped_result(results.sort('energy', pymongo.ASCENDING).limit(1)[0])
+            doc = results._mapped_result(results.sort('energy_per_site', pymongo.ASCENDING).limit(1)[0])
             form = doc["pretty_formula"]
 
             formula_dict = self.lowest.setdefault(form, dict())
