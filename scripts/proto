@@ -18,14 +18,40 @@ import yaml
 
 import bson.objectid
 
+import pymatgen.io.cifio
+
 import matgendb as mgdb
 import matgendb.util
 
 import splpy.util
 from splpy.lj.query_engine import LjQueryEngine
+import splpy.resio as resio
+import splpy.lj.prototype
 
 
 _log = logging.getLogger("proto")  # parent
+
+
+def find_prototypes(args):
+    d = mgdb.util.get_settings(args.config_file)
+    qe = LjQueryEngine(host=d["host"], port=d["port"], database=d["database"],
+                       user=d["readonly_user"], password=d["readonly_password"],
+                       collection=args.collection, aliases_config=d.get("aliases_config", None))
+
+    structures = dict()
+    for file in args.structures:
+        if file.endswith('.res'):
+            structures[file] = resio.Res.from_file(file)
+        elif file.endswith('.cif'):
+            with open(file, 'r') as cif:
+                structures[file] = pymatgen.io.cifio.CifParser.from_string(cif.read()).get_structures()[0]
+        else:
+            _log.error('{} unrecognised file format'.format(file))
+
+    for name, structure in structures.iteritems():
+        proto_id = splpy.lj.prototype.find_prototype(structure, qe.db)
+        proto = proto_id if proto_id else 'Not found'
+        print('{}: {}'.format(name, proto))
 
 
 def update_prototypes(args):
@@ -62,6 +88,7 @@ def dump_prototypes(args):
 
         yaml.safe_dump(results, prototypes_file, default_flow_style=False)
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="""
     proto is a command line utility to interact with the prototypes collection
@@ -97,6 +124,13 @@ if __name__ == "__main__":
     pdump.add_argument("-o", dest="prototypes_file", type=str, default="prototypes.yaml",
                        help="File to save the prototypes to.")
     pdump.set_defaults(func=dump_prototypes)
+
+    # The 'find' subcommand
+    pfind = subparsers.add_parser("find", help="Find the prototype id(s) for one or more structures.",
+                                  parents=[parent_vb, parent_cfg])
+    pfind.add_argument('structures', type=str, nargs='+', help='The structures to match to prototypes.')
+    pfind.set_defaults(func=find_prototypes)
+
 
     # The 'update' subcommand.
     pupdate = subparsers.add_parser("update",

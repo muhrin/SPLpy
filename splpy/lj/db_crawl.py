@@ -154,18 +154,19 @@ class Refine(object):
         params = splpy.lj.util.LjInteractions.from_dict(params_doc)
 
         # Get the uniques at the current parameter point
-        my_structures = db_query.get_unique(query_engine, params, self._matcher, save_doc=True)
+        my_structures = db_query.get_unique(query_engine, params, self._matcher,
+                                            save_doc=True, properties=['prototype_id'])
+        proto_ids = list()
+        for structure in my_structures:
+            proto_id = structure.splpy_doc.get("prototype_id")
+            if proto_id:
+                proto_ids.append(proto_id)
 
         # Get uniques from surrounding points (exclude this point)
         params_range = db_query.surrounding_range(params, self.dist)
-        surrounding_structures = db_query.get_unique(query_engine, params_range, self._matcher,
-                                                     criteria={"potential.params_id": {"$ne": params_id}},
-                                                     limit=self.limit)
-        # surrounding_structures = query_engine.get_structures(params_range,
-        # criteria={"potential.params_id": {"$ne": params_id}},
-        # sort_by='energy',
-        # limit=self.limit,
-        # save_doc=True)
+        surrounding_structures = self._get_unique(params_range, query_engine,
+                                                  criteria={"prototype_id": {"$nin": proto_ids}})
+
         logger.debug("Found {} unique surrounding structures".format(len(surrounding_structures)))
 
         # Cull uniques that are the same as any of my structures
@@ -205,11 +206,12 @@ class Refine(object):
         new_structures = list()
         while relaxed_structures:
             relaxed = relaxed_structures.pop()
+            energy_per_atom = relaxed.splpy_res.energy / len(relaxed)
 
             keep = True
             # Check if it's the same as any of the structures at this parameter point already
             for my in my_structures:
-                if are_close_fraction(relaxed.splpy_res.energy, my.splpy_doc['energy'], 1e-2):
+                if are_close_fraction(energy_per_atom, my.splpy_doc['energy'] / len(my), 1e-2):
                     try:
                         if self._matcher.fit(relaxed, my):
                             keep = False
@@ -223,7 +225,7 @@ class Refine(object):
             if keep:
                 # Check if it's the same as any of the other relaxed structures
                 for unique in new_structures:
-                    if are_close_fraction(relaxed.splpy_res.energy, unique.splpy_res.energy, 1e-2):
+                    if are_close_fraction(energy_per_atom, unique.splpy_res.energy / len(unique), 1e-2):
                         try:
                             if self._matcher.fit(relaxed, unique):
                                 keep = False
@@ -254,7 +256,7 @@ class Refine(object):
         # Save the res files
         for struct in structures:
             doc = struct.splpy_doc
-            res = resio.Res(struct, doc.get("name"), doc.get("pressure"), doc.get("energy"),
+            res = resio.Res(struct, doc.get("_id"), doc.get("pressure"), doc.get("energy"),
                             doc.get("spacegroup.symbol"), doc.get("times_found"))
             res.write_file(os.path.join(structures_dir, "{}.res".format(doc["_id"])))
 
@@ -276,11 +278,51 @@ class Refine(object):
         params_dict = dict()
         for pair, inter in params.interactions.iteritems():
             params_dict[str(pair)] = [inter.epsilon, inter.sigma, inter.m, inter.n, inter.cut]
-        if not d.get("potential"):
-            d["potential"] = dict()
-        d["potential"]["lennardJones"] = {"params": params_dict}
+        potential = d.setdefault("potential", dict())
+        potential["lennardJones"] = {"params": params_dict}
 
         return d
+
+    def _get_unique(self, params, query_engine, criteria=None):
+        crit = criteria if criteria else dict()
+        # Add the set of parameter ids we're looking for
+        crit.update(query_engine.get_param_id_criteria(params))
+
+        structures = list()
+        without_prototype = list()
+        known_protos = set()
+        for doc in query_engine.collection.find(crit):
+            proto_id = doc.get("prototype_id")
+            if proto_id:
+                if proto_id not in known_protos:
+                    structure = Structure.from_dict(doc["structure"])
+                    structure.splpy_doc = doc
+                    structures.append(structure)
+                    known_protos.add(proto_id)
+            else:
+                structure = Structure.from_dict(doc["structure"])
+                structure.splpy_doc = doc
+                without_prototype.append(structure)
+
+        to_keep = list()
+        for structure in without_prototype:
+            keep = True
+            # Check if it's the same as any of the prototypes
+            for proto in structures:
+                try:
+                    if self._matcher.fit(structure, proto):
+                        keep = False
+                        break
+                except MemoryError:
+                    # Sometimes matcher runs out of memory if it tried to handle a structure that has
+                    # many nearest neighbour interactions (e.g. a skewed cell)
+                    logger.error("Memory error trying to match structures.")
+                    keep = False
+            if keep:
+                to_keep.append(structure)
+        structures.extend(to_keep)
+
+        return structures
 
 
 def assign_prototypes(params, query_engine):

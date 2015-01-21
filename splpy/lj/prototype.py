@@ -21,6 +21,8 @@ import splpy.util
 from splpy.util import normalised_symmetry_precision
 import splpy.resio
 
+COLLECTION_NAME = 'prototypes'
+
 
 def create_prototype(structure):
     reduced_comp = structure.composition.reduced_composition
@@ -69,7 +71,7 @@ def create_transformations(structure):
 
 def find_prototype(structure, db):
     # Get the prototypes collection
-    prototypes = db['prototypes']
+    prototypes = db[COLLECTION_NAME]
 
     structure = create_prototype(structure)
     # Find spacegroup
@@ -105,6 +107,7 @@ def get_wyckoff_sites(spacegroup):
         wyckoff_sites[site] += 1
     return wyckoff_sites
 
+
 def insert_prototype(structure, db):
     proto_id = find_prototype(structure, db)
     if proto_id:
@@ -114,7 +117,7 @@ def insert_prototype(structure, db):
     sg = SymmetryFinder(structure)
     d = {"structure": prototype.to_dict, "wyckoff_sites": get_wyckoff_sites(sg)}
     d.update(splpy.util.create_structure_db_info_sg(prototype, sg))
-    proto_id = db['prototypes'].insert(d)
+    proto_id = db[COLLECTION_NAME].insert(d)
 
     return proto_id, True
 

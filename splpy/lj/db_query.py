@@ -226,7 +226,7 @@ class VisitParamPoints(object):
         return len(query_engine.get_param_ids(self._params_criteria))
 
 
-def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_doc=True):
+def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_doc=True, properties=None):
     """
     Get the unique structures at a parameter point or points.  The params parameter can
     be either an LjInteractions or a InteractionRange.
@@ -263,7 +263,7 @@ def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_do
                         except MemoryError:
                             logger.error("Ran out of memory trying to compare structures, can't get unique.")
                             splpy.util.write_structures(structure, doc["_id"])
-                            logger.info("Bad structures saved to local folder.")
+                            logger.info("Bad structure saved to local folder.")
                             keep = False
                             break
 
@@ -273,9 +273,9 @@ def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_do
 
                 if self.limit and num_kept > self.limit:
                     break
-
-    properties = ["_id", "name", "times_found", "energy", "spacegroup.symbol", "spacegroup.number", "pressure",
-                  "structure", "pretty_formula"]
+    props = properties if properties else list()
+    props.extend(["_id", "name", "times_found", "energy", "spacegroup.symbol", "spacegroup.number", "pressure",
+                  "structure", "pretty_formula"])
 
     crit = criteria if criteria else dict()
     ve = VisitationEngine(query_engine)
@@ -286,7 +286,7 @@ def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_do
 
     lowest = dict()
     getter = LowestEnergyStore(lowest, matcher, limit)
-    ve.run_queries(getter, properties=properties, criteria=crit)
+    ve.run_queries(getter, properties=props, criteria=crit)
 
     unique = list()
     while len(lowest) > 0:

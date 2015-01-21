@@ -12,6 +12,9 @@ __date__ = "Dec 30, 2014"
 import math
 import os
 import re
+import StringIO
+import subprocess
+import tempfile
 
 import matplotlib.pyplot as plt
 import matplotlib.path as mpath
@@ -206,6 +209,18 @@ class LatexOutputter:
                 # Now we should be ready to draw the path
                 cls.draw_path(map_file, label)
 
+
+def generate_map(map_points):
+    output = StringIO.StringIO()
+    with tempfile.NamedTemporaryFile('w') as f:
+        for pt in map_points:
+            f.write('{},{},{}\n'.format(pt[0], pt[1], pt[2]))
+
+        proc = subprocess.Popen(["smap", f.name], stdout=subprocess.PIPE)
+        output.write(proc.communicate()[0])
+
+    output.seek(0, 0)
+    return output
 
 def draw_map(map_file, outputter, settings=None, output_name=None):
     if outputter == 'matplotlib':

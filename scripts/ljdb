@@ -18,7 +18,6 @@ import json
 import logging
 import multiprocessing
 import os.path
-import StringIO
 import sys
 import yaml
 
@@ -277,8 +276,6 @@ def get_unique_from_db(args):
 
 
 def map_from_db(args):
-    import subprocess
-
     def process_properties(args, lowest, query_engine):
         if args.property == "prototype":
             protos = query_engine.db["prototypes"]
@@ -343,11 +340,7 @@ def map_from_db(args):
             doc = results._mapped_result(results.sort('energy', pymongo.ASCENDING).limit(1)[0])
             form = doc["pretty_formula"]
 
-            formula_dict = self.lowest.get(form)
-            if formula_dict is None:
-                formula_dict = dict()
-                self.lowest[form] = formula_dict
-
+            formula_dict = self.lowest.setdefault(form, dict())
             formula_dict[doc["potential.params_id"]] = doc
             results.close()
 
@@ -409,16 +402,11 @@ def map_from_db(args):
     for formula, params_map in lowest.iteritems():
         filename = "{}.dat".format(formula)
         _log.info("Creating map from data in {}".format(filename))
-        f = open(filename, 'w')
+        map_points = list()
         for doc in params_map.itervalues():
-            f.write("{},{},{}\n".format(doc[map_params[0]], doc[map_params[1]], doc[args.property]))
-        f.close()
-        proc = subprocess.Popen(["smap", filename], stdout=subprocess.PIPE)
-        output = StringIO.StringIO()
-        output.write(proc.communicate()[0])
-        output.seek(0, 0)
-        splpy.map.draw_map(output, 'matplotlib', settings=settings, output_name=str(formula))
-        output.close()
+            map_points.append((doc[map_params[0]], doc[map_params[1]], doc[args.property]))
+        map_data = splpy.map.generate_map(map_points)
+        splpy.map.draw_map(map_data, 'matplotlib', settings=settings, output_name=str(formula))
 
 
 def tag_db(args):
