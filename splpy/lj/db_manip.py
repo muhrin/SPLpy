@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 class LjDb:
     STRUCTURES_COLL = "structures"
+    DUPLICATES_COLL = "duplicates"
     PARAMS_COLL = "params"
     PROTOTYPES_COLL = "prototypes"
     DUPLICATES_KEY = "file_name"
@@ -101,6 +102,15 @@ def insert_structure_entry(db, entry, check_duplicates=True, update_duplicates=F
 
         logger.debug("Inserted structure with id {}".format(entry["_id"]))
         return entry["_id"]
+
+
+def remove_structure(id, db):
+    # The collection we'll be inserting into
+    structures = db[LjDb.STRUCTURES_COLL]
+    duplicates = db[LjDb.DUPLICATES_COLL]
+
+    structures.remove({'_id': id})
+    duplicates.remove({'duplicate_of': id}, false)
 
 
 def _generate_entry(structure, params, name, energy, pressure):

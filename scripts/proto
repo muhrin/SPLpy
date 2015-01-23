@@ -41,7 +41,7 @@ def find_prototypes(args):
     structures = dict()
     for file in args.structures:
         if file.endswith('.res'):
-            structures[file] = resio.Res.from_file(file)
+            structures[file] = resio.Res.from_file(file).structure
         elif file.endswith('.cif'):
             with open(file, 'r') as cif:
                 structures[file] = pymatgen.io.cifio.CifParser.from_string(cif.read()).get_structures()[0]

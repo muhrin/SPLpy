@@ -85,7 +85,10 @@ class Prune(object):
             for s in g:
                 structure = Structure.from_dict(s["structure"])
                 structure.splpy_doc = s
-                unmatched.append(structure)
+                if self._bad_structure(structure):
+                    db_mainp.remove_structure(query_engine.db)
+                else:
+                    unmatched.append(structure)
 
             while len(unmatched) > 0:
                 ref = unmatched.pop()
@@ -106,7 +109,15 @@ class Prune(object):
                     unmatched = [unmatched[i] for i in xrange(len(unmatched)) if i not in inds]
 
     def _prune_hash(self, structure_doc):
-        return structure_doc["pretty_formula"], structure_doc["spacegroup"]["symbol"]
+        return structure_doc["pretty_formula"], structure_doc["spacegroup"]["number"]
+
+    def _bad_structure(self, structure):
+        # Kill any structures that have a near zero energy
+        if "energy" in structure.splpy_doc and structure.splpy_doc["energy"] > -0.01:
+            return True
+        if util.is_structure_bad(structure):
+            return True
+        return False
 
     def _fit(self, structure1, structure2, energy_tolerance=1e-2):
 

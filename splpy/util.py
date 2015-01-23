@@ -4,6 +4,8 @@
 Module for helper functions and other things that don't fit neatly elsewhere.
 """
 
+import sys
+
 import numpy as np
 from numpy import linalg as LA
 
@@ -124,7 +126,13 @@ def init_logging(args, logger):
 
 
 def normalised_symmetry_precision(structure, precision=0.01):
-    len_per_site = (structure.volume / structure.num_sites) ** 0.5
+    len_per_site = (structure.volume / structure.num_sites) ** (1.0 / 3.0)
+    dist_mtx = structure.distance_matrix
+    np.fill_diagonal(dist_mtx, sys.float_info.max)
+    shortest_dist = dist_mtx.min()
+    if shortest_dist < len_per_site:
+        return 0.1 * precision * shortest_dist
+
     return precision * len_per_site
 
 
@@ -133,7 +141,7 @@ def is_structure_bad(structure):
     abc = structure.lattice.abc
     for i in range(0, 3):
         for j in range(i + 1, 3):
-            if (max(abc[i], abc[j]) / min(abc[i], abc[j])) > 1000:
+            if (max(abc[i], abc[j]) / min(abc[i], abc[j])) > 100:
                 return True
 
     # Has the structure exploded?
