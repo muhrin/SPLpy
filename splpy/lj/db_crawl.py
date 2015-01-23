@@ -33,7 +33,7 @@ import splpy.structure_matching
 logger = logging.getLogger(__name__)
 
 
-def get_next_param_to_crawl(query_engine, params_range=None):
+def get_next_param_to_crawl(query_engine, params_range=None, criteria=None):
     """
     This function looks for the oldest (longest time since last crawled) point in the
     parameter range (or all parameters if None).  First it looks for any parameters
@@ -42,19 +42,25 @@ def get_next_param_to_crawl(query_engine, params_range=None):
     """
     params = query_engine.params
 
+    crit = dict()
+    if criteria:
+        crit.update(criteria)
+
     # First try and find any parameters that have never been crawled
-    criteria = {"crawl": {"$exists": False}}
+    crit.update({"crawl": {"$exists": False}})
     if params_range:
-        criteria.update(params_range.to_criteria())
-    result = params.find_and_modify(query=criteria, update={"$set": {"crawl.last_crawled": datetime.datetime.today()}},
+        crit.update(params_range.to_criteria())
+    result = params.find_and_modify(query=crit, update={"$set": {"crawl.last_crawled": datetime.datetime.today()}},
                                     new=True)
 
     if result is None:
         # Find the oldest document to be crawled
-        criteria = dict()
+        crit = dict()
+        if criteria:
+            crit.update(criteria)
         if params_range:
-            criteria.update(params_range.to_criteria())
-        result = params.find_and_modify(query=criteria,
+            crit.update(params_range.to_criteria())
+        result = params.find_and_modify(query=crit,
                                         update={"$set": {"crawl.last_crawled": datetime.datetime.today()}},
                                         sort={"crawl.last_crawled": 1}, new=True)
 

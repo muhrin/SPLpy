@@ -65,6 +65,13 @@ def init_criteria(args):
     except AttributeError:
         pass
 
+    for key, value in criteria.iteritems():
+        try:
+            if value.startswith("ObjectId"):
+                criteria[key] = bson.objectid.ObjectId(value[10:len(value) - 2])
+        except AttributeError:
+            pass
+
     return criteria
 
 
@@ -115,7 +122,7 @@ def crawl_db(args):
     qe = LjQueryEngine(host=d["host"], port=d["port"], database=d["database"],
                        user=d["readonly_user"], password=d["readonly_password"],
                        collection=d["collection"], aliases_config=d.get("aliases_config", None))
-    criteria = parse_criteria_or_die(args.criteria)
+    criteria = init_criteria(args)
 
     functions = list()
     if args.prune:
@@ -125,12 +132,10 @@ def crawl_db(args):
     if args.prototype:
         functions.append(db_crawl.assign_prototypes)
 
-    params_range = lj.db_query.LennardJonesSearchRange()
-    if criteria:
-        if "potential.params" in criteria:
-            params_range = lj.db_query.LennardJonesSearchRange.from_dict(criteria.pop("potential.params"))
+    params_range = lj.db_query.LennardJonesSearchRange.from_dict(criteria.pop("potential.params")) \
+        if "potential.params" in criteria else None
 
-    params = db_crawl.get_next_param_to_crawl(qe, params_range)
+    params = db_crawl.get_next_param_to_crawl(qe, params_range, criteria=criteria)
     while params:
         _log.info("Crawling parameter point {}".format(params["_id"]))
         # Call all the selected functions
