@@ -86,7 +86,7 @@ class Prune(object):
                 structure = Structure.from_dict(s["structure"])
                 structure.splpy_doc = s
                 if self._bad_structure(structure):
-                    db_mainp.remove_structure(query_engine.db)
+                    db_manip.remove_structure(query_engine.db)
                 else:
                     unmatched.append(structure)
 
