@@ -110,7 +110,7 @@ def remove_structure(id, db):
     duplicates = db[LjDb.DUPLICATES_COLL]
 
     structures.remove({'_id': id})
-    duplicates.remove({'duplicate_of': id}, false)
+    duplicates.remove({'duplicate_of': id}, multi=True)
 
 
 def _generate_entry(structure, params, name, energy, pressure):

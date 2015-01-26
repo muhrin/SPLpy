@@ -13,9 +13,12 @@ __date__ = "Aug 2, 2014"
 
 from abc import ABCMeta, abstractmethod
 
+import pymatgen
 from pymatgen.serializers.json_coders import MSONable
+import pymatgen.io.cifio
 
 from splpy.util import OrderedPair
+import splpy.resio
 
 
 class DB:
@@ -155,9 +158,32 @@ class LjInteractions(MSONable, Criteriable):
 
 def add_to_criteria(crit, key, value):
     if key in crit:
-        if not "$and" in crit:
+        if "$and" not in crit:
             crit["$and"] = [{key: crit[key]}]
         crit.pop(key)
         crit["$and"].append({key: value})
     else:
         crit[key] = value
+
+
+def create_structure(doc, save_doc=False):
+    structure = pymatgen.core.Structure.from_dict(doc['structure'])
+    if save_doc:
+        structure.splpy_doc = doc
+    return structure
+
+
+def create_structures(docs, save_docs=False):
+    return [create_structure(doc, save_docs) for doc in docs]
+
+
+def create_writer(doc, type="res"):
+    if type == "res":
+        s = splpy.resio.Res.from_dict(doc)
+    elif type == "cif":
+        s = pymatgen.io.cifio.CifWriter(doc['structure'])
+    return s
+
+
+def create_writers(docs, type="res"):
+    return [create_writer(doc, type) for doc in docs]

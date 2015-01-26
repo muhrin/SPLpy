@@ -131,6 +131,8 @@ def crawl_db(args):
         functions.append(db_crawl.Refine(args.refine, args.refine_dist, args.refine_limit))
     if args.prototype:
         functions.append(db_crawl.assign_prototypes)
+    if args.hulls:
+        functions.append(db_crawl.ensure_hull)
 
     params_range = lj.db_query.LennardJonesSearchRange.from_dict(criteria.pop("potential.params")) \
         if "potential.params" in criteria else None
@@ -143,7 +145,7 @@ def crawl_db(args):
             func(params, qe)
 
         # Get the next one
-        params = db_crawl.get_next_param_to_crawl(qe, params_range)
+        params = db_crawl.get_next_param_to_crawl(qe, params_range, criteria=criteria)
 
 
 def query_db(args):
@@ -196,6 +198,7 @@ def get_from_db(args):
         cur.sort(parse_sort_tokens(args.sort))
     if args.limit is not None:
         cur.limit(args.limit)
+    num_fetched = 0
     for doc in cur:
         str = mg.core.Structure.from_dict(doc["structure"])
         sg = doc.get("spacegroup")
@@ -204,6 +207,8 @@ def get_from_db(args):
         res = splpy.resio.Res(str, doc.get("name"), doc.get("pressure"), doc.get("energy"),
                               doc.get("spacegroup.symbol"), doc.get("times_found"))
         res.write_file("{}.res".format(doc["_id"]))
+        num_fetched += 1
+    print("Got {} structures".format(num_fetched))
 
 
 def get_unique_from_db(args):
@@ -480,6 +485,8 @@ if __name__ == "__main__":
     pcrawl = subparsers.add_parser("crawl",
                                    help="Crawl the database performing normalisation, cleanup, etc. on entries.",
                                    parents=[parent_vb, parent_cfg])
+    pcrawl.add_argument("--hulls", action='store_true',
+                        help='Generate composition stability hulls for all parameter poits')
     pcrawl.add_argument("--prototype", action='store_true', help="Assign a prototype to each structure")
     pcrawl.add_argument("--prune", action='store_true', help="Remove duplicate structure from each parameter point")
     pcrawl.add_argument("--refine", dest="refine", type=str, default=None,

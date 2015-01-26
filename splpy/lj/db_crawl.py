@@ -22,6 +22,7 @@ import yaml
 from pymatgen.core.structure import Structure
 import pymatgen.analysis.structure_matcher as structure_matcher
 
+import splpy.lj.db_hulls as db_hulls
 import splpy.lj.db_manip as db_manip
 import splpy.lj.db_query as db_query
 import splpy.lj.prototype as prototype
@@ -88,11 +89,11 @@ class Prune(object):
         # Now check for any duplicates
         for k, g in itertools.groupby(sorted_structures, key=self._prune_hash):
             unmatched = list()
-            for s in g:
-                structure = Structure.from_dict(s["structure"])
-                structure.splpy_doc = s
+            for doc in g:
+                structure = Structure.from_dict(doc["structure"])
+                structure.splpy_doc = doc
                 if self._bad_structure(structure):
-                    db_manip.remove_structure(query_engine.db)
+                    db_manip.remove_structure(doc["_id"], query_engine.db)
                 else:
                     unmatched.append(structure)
 
@@ -355,6 +356,10 @@ def assign_prototypes(params, query_engine):
             query_engine.collection.update({'_id': doc['_id']}, {"$set": {'prototype_id': proto_id}})
         else:
             logger.info("Skipping structure {} because there is something wrong with it.".format(doc["_id"]))
+
+
+def ensure_hull(params_doc, query_engine):
+    db_hulls.ensure_hull(query_engine.db, params_doc['_id'])
 
 
 def are_close_fraction(value1, value2, tolerance):

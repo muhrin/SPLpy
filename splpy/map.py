@@ -31,17 +31,14 @@ def parse_point(point):
 
 
 class MatplotlibOutputter:
-    def out(self, map_file, output_name=None, settings=None):
+    def out(self, map_file, output_name=None, settings=None, mask=None):
         fig, ax = plt.subplots()
         output_file = output_name if output_name else "map"
         output_file += ".pdf"
 
-        line = map_file.readline()
-        while line:
-            line = line.rstrip(os.linesep)
-            if line != '':
-                self.draw_face(ax, map_file, line, settings)
-            line = map_file.readline()
+        self._draw(map_file, ax, settings)
+        if mask:
+            self.draw_mask(mask, ax, settings)
 
         ax.set_aspect('equal', 'box')
         # Set the x and y range to be exactly the data limits
@@ -63,11 +60,30 @@ class MatplotlibOutputter:
     def draw_face(self, axes, map_file, label, settings):
         line = map_file.readline().rstrip(os.linesep)
         if line == 'Points':
-            self.draw_points(map_file, label, settings)
-            self.draw_path(axes, map_file, label, settings)
+            x, y = self._parse_points(map_file)
+            self.draw_points(x, y, self.get_property(label, 'color', settings), 0.3)
 
-    def draw_points(self, map_file, label, settings):
+        codes, coords = self.parse_path(map_file)
+        self._draw_path(axes, coords, codes, settings, label=label)
 
+    def draw_points(self, x, y, color, size):
+        plt.scatter(x, y, color=color, s=size, zorder=1)
+
+    def draw_mask(self, map_file, axes, settings):
+        line = map_file.readline().rstrip(os.linesep)
+        while line:
+            if line == 'OFF':
+                found_mask = True
+            if found_mask and line == 'POINTS':
+                codes, coords = self.parse_path(map_file)
+                face_path = mpath.Path(coords, codes, closed=True)
+                face_patch = mpatches.PathPatch(face_path, fill=True, color='white', linewidth=0, opacity=0.5)
+                axes.add_patch(face_patch)
+                found_mask = False
+
+            line = map_file.readline().rstrip(os.linesep)
+
+    def _parse_points(self, map_file):
         line = map_file.readline().rstrip(os.linesep)
         x = list()
         y = list()
@@ -79,53 +95,61 @@ class MatplotlibOutputter:
             y.append(pt[1])
 
             line = map_file.readline().rstrip(os.linesep)
+        return x, y
 
-        plt.scatter(x, y, color=self.get_property(label, 'color', settings), s=0.3, zorder=1)
-
-    def draw_path(self, axes, map_file, label, settings):
-        line = map_file.readline().rstrip(os.linesep)
+    def parse_path(self, map_file):
         codes = list()
         coords = list()
-        poly_coords = list()
+        line = map_file.readline().rstrip(os.linesep)
         while line and len(line) >= 6:
             command = line[:6]
             if command == 'MOVETO':
                 codes.append(mpath.Path.MOVETO)
                 pt = parse_point(line[7:])
                 coords.append(pt)
-                poly_coords.append(pt)
             elif command == 'LINETO':
                 codes.append(mpath.Path.LINETO)
                 pt = parse_point(line[7:])
                 coords.append(pt)
-                poly_coords.append(pt)
             elif command == 'CURVE4':
                 codes.append(mpath.Path.CURVE4)
                 codes.append(mpath.Path.CURVE4)
                 codes.append(mpath.Path.CURVE4)
 
                 match = re.search(r'(\(.+\)), (\(.+\)), (\(.+\))', line[7:])
-                coords.append(parse_point(match.group(1)))
-                coords.append(parse_point(match.group(2)))
-                end_pt = parse_point(match.group(3))
-                coords.append(end_pt)
-                poly_coords.append(end_pt)
+                for i in range(1, 4):
+                    coords.append(parse_point(match.group(i)))
             else:
                 return
             line = map_file.readline().rstrip(os.linesep)
+        return codes, coords
 
+    def _draw_path(self, axes, coords, codes, settings, fill=False, color='black', linewidth=0.5, label=None):
         face_path = mpath.Path(coords, codes, closed=True)
-        face_patch = mpatches.PathPatch(face_path, fill=False, color='black', linewidth=0.5)
+        face_patch = mpatches.PathPatch(face_path, fill=fill, color=color, linewidth=linewidth)
         axes.add_patch(face_patch)
 
-        poly = Polygon(poly_coords)
-        if poly.is_valid and poly.area > 0.09:
-            rep_pt = poly.representative_point()
-            fontsize = min(28 * math.sqrt(poly.area) + 2.0, 22)
-            color = self.get_property(label, 'color', settings)
-            plt.text(rep_pt.x, rep_pt.y, self.get_label_string(label, settings), size=fontsize,
-                     horizontalalignment='center', verticalalignment='center',
-                     bbox=dict(facecolor=color, edgecolor=color, boxstyle='round', alpha=0.75))
+        if label:
+            poly_coords = list()
+            num_curve_codes = 0
+            for pt, code in zip(coords, codes):
+                if code is 'CURVE4':
+                    num_curve_codes += 1
+                    if num_curve_codes == 3:
+                        poly_coords.append(pt)
+                        num_curve_codes = 0
+                else:
+                    poly_coords.append(pt)
+                    num_curve_codes = 0
+
+            poly = Polygon(poly_coords)
+            if poly.is_valid and poly.area > 0.09:
+                rep_pt = poly.representative_point()
+                fontsize = min(28 * math.sqrt(poly.area) + 2.0, 22)
+                color = self.get_property(label, 'color', settings)
+                plt.text(rep_pt.x, rep_pt.y, self.get_label_string(label, settings), size=fontsize,
+                         horizontalalignment='center', verticalalignment='center',
+                         bbox=dict(facecolor=color, edgecolor=color, boxstyle='round', alpha=0.75))
 
     def get_property(self, label, prop, settings):
         value = None
@@ -152,6 +176,14 @@ class MatplotlibOutputter:
             label_str = label
 
         return label_str
+
+    def _draw(self, map_file, ax, settings=None):
+        line = map_file.readline()
+        while line:
+            line = line.rstrip(os.linesep)
+            if line != '':
+                self.draw_face(ax, map_file, line, settings)
+            line = map_file.readline()
 
 
 class LatexOutputter:
@@ -222,7 +254,8 @@ def generate_map(map_points):
     output.seek(0, 0)
     return output
 
-def draw_map(map_file, outputter, settings=None, output_name=None):
+
+def draw_map(map_file, outputter, settings=None, output_name=None, mask=None):
     if outputter == 'matplotlib':
         out = MatplotlibOutputter()
     elif outputter == 'latex':
@@ -230,4 +263,4 @@ def draw_map(map_file, outputter, settings=None, output_name=None):
     else:
         raise ValueError("Unknown map outputter: {}".format(outputter))
 
-    out.out(map_file, output_name, settings)
+    out.out(map_file, output_name, settings, mask)

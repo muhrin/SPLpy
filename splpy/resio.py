@@ -231,8 +231,11 @@ class Res(MSONable):
 
     @classmethod
     def from_dict(cls, d):
+        sg = d.get('spacegroup')
+        if isinstance(sg, dict):
+            sg = sg['symbol']
         return Res(Structure.from_dict(d["structure"]), d.get('name'),
-                   d.get('pressure'), d.get('energy'), d.get('spacegroup'), d.get('times_found'))
+                   d.get('pressure'), d.get('energy'), sg, d.get('times_found'))
 
     def print_title(self):
         tokens = [self.name, self.pressure, self.structure.volume, self.energy, 0.0, 0.0, self.structure.num_sites]

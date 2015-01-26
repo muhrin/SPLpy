@@ -38,7 +38,7 @@ def create_prototype(structure):
     # Scale the volume to be 1 unit per atom
     str_copy.scale_lattice(str_copy.num_sites)
 
-    sg = SymmetryFinder(str_copy, splpy.util.normalised_symmetry_precision(str_copy), -1)
+    sg = SymmetryFinder(str_copy)
 
     return sg.get_conventional_standard_structure()
 
@@ -78,7 +78,7 @@ def find_prototype(structure, db):
 
     structure = create_prototype(structure)
     # Find spacegroup
-    sg = SymmetryFinder(structure, splpy.util.normalised_symmetry_precision(structure), -1)
+    sg = SymmetryFinder(structure)
 
     matcher = structure_matcher.StructureMatcher(primitive_cell=False, attempt_supercell=True)
     transformed = [t.apply_transformation(structure) for t in create_transformations(structure)]
