@@ -14,3 +14,13 @@ STRUCTURES_COLLECTION = 'structures'
 
 def get_params_id_criteria(params_id):
     return {'potential.params_id': params_id}
+
+
+def get_params_id(structure_id, db):
+    structures_coll = db[STRUCTURES_COLLECTION]
+    cur = structures_coll.find({"_id": structure_id, "potential.params_id": {"$exists": True}},
+                               fields={"potential.params_id"}).limit(1)
+    if not cur:
+        return None
+
+    return cur[0]["potential"]["params_id"]

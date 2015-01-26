@@ -42,6 +42,7 @@ import splpy.interval
 import splpy.map
 from splpy.lj.assimilate import LjToDbTaskDrone
 from splpy.lj.query_engine import LjQueryEngine
+import splpy.lj.db_map as db_map
 from splpy.lj.db_query import VisitationEngine
 import splpy.lj.db_crawl as db_crawl
 
@@ -286,37 +287,6 @@ def get_unique_from_db(args):
 
 
 def map_from_db(args):
-    def process_properties(args, lowest, query_engine):
-        if args.property == "prototype":
-            protos = query_engine.db["prototypes"]
-            for formula, params_map in lowest.iteritems():
-                # Get the set of all prototype ids we need
-                proto_ids = set([doc["prototype_id"] for doc in params_map.itervalues()])
-                proto_ids.discard(None)
-
-                proto_values = dict()
-                for proto_id in proto_ids:
-                    value = None
-                    doc = protos.find({"_id": proto_id})[0]
-                    if "structure_type" in doc:
-                        value = doc["structure_type"]
-                    else:
-                        if "strukturbericht" in doc:
-                            value = doc["structure_type"]
-                        elif "pearson" in doc:
-                            value = "{} ({})".format(doc["spacegroup.symbol"], doc["pearson"])
-
-                    if value:
-                        proto_values[proto_id] = value
-
-                # Set the values for each of the parameter points
-                for doc in params_map.itervalues():
-                    if doc["prototype_id"] in proto_values:
-                        doc["prototype"] = proto_values[doc["prototype_id"]]
-                    else:
-                        # Use the spacegroup as a fallback
-                        doc["prototype"] = doc["spacegroup.symbol"]
-
     def to_latex_string(interaction_string):
         tokens = interaction_string.split('.')
 
@@ -376,12 +346,17 @@ def map_from_db(args):
                        user=d["readonly_user"], password=d["readonly_password"],
                        collection=d["collection"], aliases_config=d.get("aliases_config", None))
 
-    properties = ["pretty_formula", "potential.params_id"]
+    properties = ["_id", "pretty_formula", "potential.params_id"]
+
     # Special case for using the structure prototype as the property to map
-    if args.property == 'prototype':
-        properties.extend(["prototype_id", "spacegroup.symbol"])
-    else:
-        properties.append(args.property)
+    property_getter = db_map.create_property_getter(args.property)
+    properties.extend(property_getter.properties)
+
+    mask_getter = None
+    if args.mask_property:
+        mask_getter = db_map.create_mask_property_getter(args.mask_property)
+        properties.extend(mask_getter.properties)
+
     properties.extend(map_params)
 
     ve = VisitationEngine(qe)
@@ -395,7 +370,6 @@ def map_from_db(args):
     lowest = dict()
     getter = LowestEnergyStore(lowest)
     ve.run_queries(getter, properties=properties, criteria=criteria)
-    process_properties(args, lowest, qe)
 
     settings = None
     try:
@@ -410,13 +384,28 @@ def map_from_db(args):
         pass
 
     for formula, params_map in lowest.iteritems():
-        filename = "{}.dat".format(formula)
-        _log.info("Creating map from data in {}".format(filename))
+        _log.info("Creating {} map".format(formula))
+
+        # Get the mapping property values
+        property_values = property_getter.get_values(params_map.itervalues(), qe)
+
         map_points = list()
         for doc in params_map.itervalues():
-            map_points.append((doc[map_params[0]], doc[map_params[1]], doc[args.property]))
+            if doc['_id'] in property_values:
+                map_points.append((doc[map_params[0]], doc[map_params[1]], property_values[doc['_id']]))
         map_data = splpy.map.generate_map(map_points)
-        splpy.map.draw_map(map_data, 'matplotlib', settings=settings, output_name=str(formula))
+
+        mask_data = None
+        if mask_getter:
+            mask_values = mask_getter.get_values(params_map.itervalues(), qe)
+            map_points = []
+            for doc in params_map.itervalues():
+                if doc['_id'] in mask_values:
+                    map_points.append((doc[map_params[0]], doc[map_params[1]], mask_values[doc['_id']]))
+            mask_data = splpy.map.generate_map(map_points)
+
+
+        splpy.map.draw_map(map_data, 'matplotlib', settings=settings, output_name=str(formula), mask=mask_data)
 
 
 def tag_db(args):
@@ -496,7 +485,7 @@ if __name__ == "__main__":
     pcrawl.add_argument("--refine-dist", dest="refine_dist", type=float, default=0.1,
                         help="The distance away from each parameter point to refine to.")
     pcrawl.add_argument("--refine-limit", dest="refine_limit", type=int, default=None,
-                        help="The number of top unique structure to take from each surrounding parameter point for refinement.")
+                        help="The top n unique structure to take from each surrounding parameter point for refinement.")
     pcrawl.add_argument("--crit", dest="criteria", type=str, default=None,
                         help="Confine the crawl to entries matching this criteria "
                              "{\"pretty_formula\": \"AB\"}.")
@@ -603,6 +592,8 @@ if __name__ == "__main__":
                            "{\"potential.params.A~B.sigma\": \"[0.5, 1.5)\"}}}.")
     pmap.add_argument("--prop", dest="property", type=str, default="prototype",
                       required=False, help="Use this structure property to create the map from")
+    pmap.add_argument("--mask_prop", dest="mask_property", type=str, default="stable",
+                      required=False, help="Use this to set the map mask property")
     pmap.add_argument("--stoich", dest="stoichiometry", type=Composition, default=None,
                       help="Search for structures with a particular stoichiometry e.g. AB2")
     pmap.add_argument("--settings", dest="settings", type=str, default=None,

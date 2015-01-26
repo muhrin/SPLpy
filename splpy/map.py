@@ -71,13 +71,14 @@ class MatplotlibOutputter:
 
     def draw_mask(self, map_file, axes, settings):
         line = map_file.readline().rstrip(os.linesep)
+        found_mask = False
         while line:
-            if line == 'OFF':
+            if line == 'False':
                 found_mask = True
-            if found_mask and line == 'POINTS':
+            if found_mask and line == 'Path':
                 codes, coords = self.parse_path(map_file)
                 face_path = mpath.Path(coords, codes, closed=True)
-                face_patch = mpatches.PathPatch(face_path, fill=True, color='white', linewidth=0, opacity=0.5)
+                face_patch = mpatches.PathPatch(face_path, fill=True, color='gray', linewidth=0, alpha=0.5)
                 axes.add_patch(face_patch)
                 found_mask = False
 
@@ -247,6 +248,7 @@ def generate_map(map_points):
     with tempfile.NamedTemporaryFile('w') as f:
         for pt in map_points:
             f.write('{},{},{}\n'.format(pt[0], pt[1], pt[2]))
+        f.flush()
 
         proc = subprocess.Popen(["smap", f.name], stdout=subprocess.PIPE)
         output.write(proc.communicate()[0])
