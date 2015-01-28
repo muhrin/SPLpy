@@ -359,7 +359,7 @@ def assign_prototypes(params, query_engine):
     for stoich in stoichs:
         for doc in structures_coll.find(
                 {"potential.params_id": params["_id"], "prototype_id": {"$exists": False}, "pretty_formula": stoich},
-                fields={"structure": 1, "energy_per_site": 1}).sort('energy_per_site', pymongo.ASCENDING).limit(4):
+                fields={"structure": 1, "energy_per_site": 1}).sort('energy_per_site', pymongo.ASCENDING).limit(1):
             # Either get the prototype or insert this structure as a new one
             structure = Structure.from_dict(doc["structure"])
             if not splpy.util.is_structure_bad(structure):
