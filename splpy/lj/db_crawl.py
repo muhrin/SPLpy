@@ -19,12 +19,15 @@ import shutil
 import tempfile
 import yaml
 
+import pymongo
+
 from pymatgen.core.structure import Structure
 import pymatgen.analysis.structure_matcher as structure_matcher
 
 import splpy.lj.db_hulls as db_hulls
 import splpy.lj.db_manip as db_manip
 import splpy.lj.db_query as db_query
+import splpy.lj.db_structures as db_structures
 import splpy.lj.prototype as prototype
 import splpy.lj.util
 import splpy.resio as resio
@@ -93,7 +96,7 @@ class Prune(object):
                 structure = Structure.from_dict(doc["structure"])
                 structure.splpy_doc = doc
                 if self._bad_structure(structure):
-                    db_manip.remove_structure(doc["_id"], query_engine.db)
+                    db_structures.remove_structure(doc["_id"], query_engine.db)
                 else:
                     unmatched.append(structure)
 
@@ -346,16 +349,29 @@ class Refine(object):
 
 def assign_prototypes(params, query_engine):
     # Assign prototypes to all the structures at this parameter point that do not have a prototype
-    for doc in query_engine.query(
-            criteria={"potential.params_id": params["_id"], "prototype_id": {"$exists": 0}},
-            properties=["_id", "structure"]):
-        # Either get the prototype or insert this structure as a new one
-        structure = Structure.from_dict(doc["structure"])
-        if not splpy.util.is_structure_bad(structure):
-            proto_id = prototype.insert_prototype(structure, query_engine.db)[0]
-            query_engine.collection.update({'_id': doc['_id']}, {"$set": {'prototype_id': proto_id}})
-        else:
-            logger.info("Skipping structure {} because there is something wrong with it.".format(doc["_id"]))
+    total_prototypes = 0
+    new_prototypes = 0
+
+    structures_coll = query_engine.collection
+    stoichs = structures_coll.find({"potential.params_id": params["_id"]}, {"pretty_formula": 1}).\
+        distinct("pretty_formula")
+
+    for stoich in stoichs:
+        for doc in structures_coll.find(
+                {"potential.params_id": params["_id"], "prototype_id": {"$exists": False}, "pretty_formula": stoich},
+                fields={"structure": 1, "energy_per_site": 1}).sort('energy_per_site', pymongo.ASCENDING).limit(4):
+            # Either get the prototype or insert this structure as a new one
+            structure = Structure.from_dict(doc["structure"])
+            if not splpy.util.is_structure_bad(structure):
+                proto_id, is_new = prototype.insert_prototype(structure, query_engine.db)
+                query_engine.collection.update({'_id': doc['_id']}, {"$set": {'prototype_id': proto_id}})
+                total_prototypes += 1
+                if is_new:
+                    new_prototypes += 1
+            else:
+                logger.info("Skipping structure {} because there is something wrong with it.".format(doc["_id"]))
+
+    logger.info("Assigned {} prototypes, {} new.".format(total_prototypes, new_prototypes))
 
 
 def ensure_hull(params_doc, query_engine):

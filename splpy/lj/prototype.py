@@ -21,10 +21,13 @@ import pymatgen.analysis.structure_matcher as structure_matcher
 import splpy.util
 from splpy.util import normalised_symmetry_precision
 import splpy.resio
+import splpy.structure_tidy as structure_tidy
 
 COLLECTION_NAME = 'prototypes'
 
 logger = logging.getLogger(__name__)
+
+_symm_precision = 0.01
 
 
 def create_prototype(structure):
@@ -38,9 +41,9 @@ def create_prototype(structure):
     # Scale the volume to be 1 unit per atom
     str_copy.scale_lattice(str_copy.num_sites)
 
-    sg = SymmetryFinder(str_copy)
-
-    return sg.get_conventional_standard_structure()
+    sg = SymmetryFinder(str_copy, _symm_precision, angle_tolerance=-1)
+    # return structure_tidy.structure_tidy(sg.get_primitive_standard_structure())
+    return structure_tidy.structure_tidy(sg.find_primitive())
 
 
 def create_transformations(structure):
@@ -78,7 +81,7 @@ def find_prototype(structure, db):
 
     structure = create_prototype(structure)
     # Find spacegroup
-    sg = SymmetryFinder(structure)
+    sg = SymmetryFinder(structure, _symm_precision, angle_tolerance=-1)
 
     matcher = structure_matcher.StructureMatcher(primitive_cell=False, attempt_supercell=True)
     transformed = [t.apply_transformation(structure) for t in create_transformations(structure)]
@@ -87,7 +90,8 @@ def find_prototype(structure, db):
     for entry in prototypes.find(
             {"anonymous_formula": structure.composition.anonymized_formula,
              "spacegroup.number": sg.get_spacegroup_number(),
-             "nsites": structure.num_sites}):
+             "nsites": structure.num_sites,
+             "wyckoff_sites": get_wyckoff_sites(sg)}):
 
         # Create the structure object for the prototype to compare against
         prototype = Structure.from_dict(entry["structure"])
@@ -117,9 +121,9 @@ def insert_prototype(structure, db):
         return proto_id, False
 
     prototype = create_prototype(structure)
-    sg = SymmetryFinder(structure)
+    sg = SymmetryFinder(structure, _symm_precision, angle_tolerance=-1)
     d = {"structure": prototype.to_dict, "wyckoff_sites": get_wyckoff_sites(sg)}
-    d.update(splpy.util.create_structure_db_info_sg(prototype, sg))
+    d.update(splpy.util.create_structure_db_info(prototype, sg))
     proto_id = db[COLLECTION_NAME].insert(d)
 
     return proto_id, True

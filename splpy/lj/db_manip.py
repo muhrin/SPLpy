@@ -104,15 +104,6 @@ def insert_structure_entry(db, entry, check_duplicates=True, update_duplicates=F
         return entry["_id"]
 
 
-def remove_structure(id, db):
-    # The collection we'll be inserting into
-    structures = db[LjDb.STRUCTURES_COLL]
-    duplicates = db[LjDb.DUPLICATES_COLL]
-
-    structures.remove({'_id': id})
-    duplicates.remove({'duplicate_of': id}, multi=True)
-
-
 def _generate_entry(structure, params, name, energy, pressure):
     comp = structure.composition
     entry = {"structure": structure.to_dict, "name": name, "energy": energy, "energy_per_site": energy / comp.num_atoms,
