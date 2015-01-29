@@ -33,6 +33,7 @@ import splpy.lj.util
 import splpy.resio as resio
 import splpy.util as util
 import splpy.structure_matching
+from splpy.lj.db_query import VisitationEngine
 
 logger = logging.getLogger(__name__)
 
@@ -178,16 +179,16 @@ class Refine(object):
         # Get the uniques at the current parameter point
         my_structures = db_query.get_unique(query_engine, params, self._matcher,
                                             save_doc=True, properties=['prototype_id'])
-        proto_ids = list()
+        proto_ids = set()
         for structure in my_structures:
             proto_id = structure.splpy_doc.get("prototype_id")
             if proto_id:
-                proto_ids.append(proto_id)
+                proto_ids.add(proto_id)
 
         # Get uniques from surrounding points (exclude this point)
         params_range = db_query.surrounding_range(params, self.dist)
-        surrounding_structures = self._get_unique(params_range, query_engine,
-                                                  criteria={"prototype_id": {"$nin": proto_ids}})
+        surrounding_structures = self._get_unique(params_range, query_engine, proto_ids,
+                                                  criteria={"potential.params_id": {"$ne": params_id}})
 
         logger.debug("Found {} unique surrounding structures".format(len(surrounding_structures)))
 
@@ -305,73 +306,87 @@ class Refine(object):
 
         return d
 
-    def _get_unique(self, params, query_engine, criteria=None):
-        crit = criteria if criteria else dict()
-        # Add the set of parameter ids we're looking for
-        crit.update(query_engine.get_param_id_criteria(params))
+    def _get_unique(self, params, query_engine, known_prototypes, criteria=None):
+        class LowestEnergyStore:
+            def __init__(self, lowest, known_prototypes, limit):
+                self.lowest = lowest
+                self.limit = limit
+                self.known_prototypes = known_prototypes
 
-        structures = list()
-        without_prototype = list()
-        known_protos = set()
-        for doc in query_engine.collection.find(crit):
-            proto_id = doc.get("prototype_id")
-            if proto_id:
-                if proto_id not in known_protos:
-                    structure = Structure.from_dict(doc["structure"])
-                    structure.splpy_doc = doc
-                    structures.append(structure)
-                    known_protos.add(proto_id)
-            else:
-                structure = Structure.from_dict(doc["structure"])
-                structure.splpy_doc = doc
-                without_prototype.append(structure)
+            def __call__(self, results):
+                results.sort('energy_per_site', pymongo.ASCENDING)
+                num_kept = 0
+                for doc in results:
+                    formula = doc["pretty_formula"]
+                    formula_dict = self.lowest.setdefault(formula, list())
 
-        to_keep = list()
-        for structure in without_prototype:
-            keep = True
-            # Check if it's the same as any of the prototypes
-            for proto in structures:
-                try:
-                    if self._matcher.fit(structure, proto):
-                        keep = False
-                        break
-                except MemoryError:
-                    # Sometimes matcher runs out of memory if it tried to handle a structure that has
-                    # many nearest neighbour interactions (e.g. a skewed cell)
-                    logger.error("Memory error trying to match structures.")
                     keep = False
-            if keep:
-                to_keep.append(structure)
-        structures.extend(to_keep)
+                    proto_id = doc.get("prototype_id")
+                    if proto_id:
+                        if proto_id not in self.known_prototypes:
+                            keep = True
+                            self.known_prototypes.add(proto_id)
+                    else:
+                        keep = True
 
-        return structures
+                    if keep:
+                        structure = Structure.from_dict(doc["structure"])
+                        structure.splpy_doc = doc
+                        formula_dict.append(structure)
+                        num_kept += 1
+
+                    if self.limit and num_kept >= self.limit:
+                        break
+
+        crit = criteria if criteria else dict()
+
+        ve = VisitationEngine(query_engine)
+        params_query = splpy.lj.db_query.VisitParamPoints(params)
+        logger.debug("Refining from {} surrounding points".format(params_query.num_points(query_engine)))
+        ve.add(params_query)
+        ve.add(splpy.lj.db_query.visit_distinct_formulae)
+
+        structures = dict()
+        getter = LowestEnergyStore(structures, known_prototypes, self.limit)
+        ve.run_queries(getter, properties=["_id", "pretty_formula", "potential.params_id", "structure", "prototype_id"],
+                       criteria=crit)
+
+        all_structures = list()
+        for formula, strs in structures.iteritems():
+            all_structures.extend(strs)
+        return all_structures
 
 
-def assign_prototypes(params, query_engine):
-    # Assign prototypes to all the structures at this parameter point that do not have a prototype
-    total_prototypes = 0
-    new_prototypes = 0
+class AssignPrototypes(object):
+    def __init__(self, limit):
+        self.limit = limit
 
-    structures_coll = query_engine.collection
-    stoichs = structures_coll.find({"potential.params_id": params["_id"]}, {"pretty_formula": 1}).\
-        distinct("pretty_formula")
+    def __call__(self, params, query_engine):
+        # Assign prototypes to all the structures at this parameter point that do not have a prototype
+        total_prototypes = 0
+        new_prototypes = 0
 
-    for stoich in stoichs:
-        for doc in structures_coll.find(
-                {"potential.params_id": params["_id"], "prototype_id": {"$exists": False}, "pretty_formula": stoich},
-                fields={"structure": 1, "energy_per_site": 1}).sort('energy_per_site', pymongo.ASCENDING).limit(1):
-            # Either get the prototype or insert this structure as a new one
-            structure = Structure.from_dict(doc["structure"])
-            if not splpy.util.is_structure_bad(structure):
-                proto_id, is_new = prototype.insert_prototype(structure, query_engine.db)
-                query_engine.collection.update({'_id': doc['_id']}, {"$set": {'prototype_id': proto_id}})
-                total_prototypes += 1
-                if is_new:
-                    new_prototypes += 1
-            else:
-                logger.info("Skipping structure {} because there is something wrong with it.".format(doc["_id"]))
+        structures_coll = query_engine.collection
+        stoichs = structures_coll.find({"potential.params_id": params["_id"]}, {"pretty_formula": 1}).\
+            distinct("pretty_formula")
 
-    logger.info("Assigned {} prototypes, {} new.".format(total_prototypes, new_prototypes))
+        for stoich in stoichs:
+            for doc in structures_coll.find(
+                    {"potential.params_id": params["_id"], "prototype_id": {"$exists": False}, "pretty_formula": stoich},
+                    fields={"structure": 1, "energy_per_site": 1}).\
+                    sort('energy_per_site', pymongo.ASCENDING).limit(self.limit):
+                # Either get the prototype or insert this structure as a new one
+                structure = Structure.from_dict(doc["structure"])
+                if not splpy.util.is_structure_bad(structure):
+                    proto_id, is_new = prototype.insert_prototype(structure, query_engine.db)
+                    query_engine.collection.update({'_id': doc['_id']}, {"$set": {'prototype_id': proto_id}})
+                    total_prototypes += 1
+                    if is_new:
+                        new_prototypes += 1
+                else:
+                    logger.info("Skipping structure {} because there is something wrong with it.".format(doc["_id"]))
+
+        logger.info("Assigned {} prototypes, {} new.".format(total_prototypes, new_prototypes))
 
 
 def ensure_hull(params_doc, query_engine):
