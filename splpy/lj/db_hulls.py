@@ -83,7 +83,8 @@ def get_endpoints(db, params_id):
 def ensure_hull(db, params_id):
     hulls = db[HULLS_COLLECTION]
 
-    if not get_endpoints(db, params_id):
+    eps = get_endpoints(db, params_id)
+    if not eps or len(eps) < 2:
         hulls.remove({'params_id': params_id})
         return False
 
@@ -111,7 +112,7 @@ def _regenerate_hull(db, hull_id):
     params_id = hull_doc['params_id']
 
     endpoints = get_endpoints(db, params_id)
-    if not endpoints:
+    if not endpoints or len(endpoints) < 2:
         return None
 
     structures_coll = db[db_structures.STRUCTURES_COLLECTION]

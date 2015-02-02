@@ -348,14 +348,14 @@ def map_from_db(args):
 
     properties = ["_id", "pretty_formula", "potential.params_id"]
 
-    # Special case for using the structure prototype as the property to map
     property_getter = db_map.create_property_getter(args.property)
     properties.extend(property_getter.properties)
 
     mask_getter = None
     if args.mask_property:
         mask_getter = db_map.create_mask_property_getter(args.mask_property)
-        properties.extend(mask_getter.properties)
+        if mask_getter:
+            properties.extend(mask_getter.properties)
 
     properties.extend(map_params)
 
@@ -592,8 +592,8 @@ if __name__ == "__main__":
                            "{\"potential.params.A~B.sigma\": \"[0.5, 1.5)\"}}}.")
     pmap.add_argument("--prop", dest="property", type=str, default="prototype",
                       required=False, help="Use this structure property to create the map from")
-    pmap.add_argument("--mask_prop", dest="mask_property", type=str, default="stable",
-                      required=False, help="Use this to set the map mask property")
+    pmap.add_argument("--mask", dest="mask_property", type=str, default=None,
+                      required=False, help="Use this to set the map mask property.  Options: stable")
     pmap.add_argument("--stoich", dest="stoichiometry", type=Composition, default=None,
                       help="Search for structures with a particular stoichiometry e.g. AB2")
     pmap.add_argument("--settings", dest="settings", type=str, default=None,

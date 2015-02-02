@@ -21,6 +21,7 @@ import matplotlib.path as mpath
 import matplotlib.patches as mpatches
 
 from shapely.geometry import Polygon
+from shapely.geometry import point
 
 OUTPUTTERS = ['matplotlib', 'latex']
 
@@ -78,7 +79,7 @@ class MatplotlibOutputter:
             if found_mask and line == 'Path':
                 codes, coords = self.parse_path(map_file)
                 face_path = mpath.Path(coords, codes, closed=True)
-                face_patch = mpatches.PathPatch(face_path, fill=True, color='gray', linewidth=0, alpha=0.5)
+                face_patch = mpatches.PathPatch(face_path, fill=True, color='gray', linewidth=0, alpha=0.5, zorder=5)
                 axes.add_patch(face_patch)
                 found_mask = False
 
@@ -143,10 +144,21 @@ class MatplotlibOutputter:
                     poly_coords.append(pt)
                     num_curve_codes = 0
 
+            rep_pt = None
             poly = Polygon(poly_coords)
-            if poly.is_valid and poly.area > 0.09:
+            num_points = len(poly_coords)
+            if poly.is_valid and poly.area > 0.085:
                 rep_pt = poly.representative_point()
                 fontsize = min(28 * math.sqrt(poly.area) + 2.0, 22)
+            elif num_points > 50:
+                sum_x = 0.0
+                sum_y = 0.0
+                for coord in coords:
+                    sum_x += coord[0]
+                    sum_y += coord[1]
+                rep_pt = point.Point([sum_x / float(num_points), sum_y / float(num_points)])
+                fontsize = min(float(num_points) / 10.0, 22)
+            if rep_pt:
                 color = self.get_property(label, 'color', settings)
                 plt.text(rep_pt.x, rep_pt.y, self.get_label_string(label, settings), size=fontsize,
                          horizontalalignment='center', verticalalignment='center',

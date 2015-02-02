@@ -371,10 +371,12 @@ class AssignPrototypes(object):
             distinct("pretty_formula")
 
         for stoich in stoichs:
-            for doc in structures_coll.find(
-                    {"potential.params_id": params["_id"], "prototype_id": {"$exists": False}, "pretty_formula": stoich},
-                    fields={"structure": 1, "energy_per_site": 1}).\
-                    sort('energy_per_site', pymongo.ASCENDING).limit(self.limit):
+            cur = structures_coll.find({"potential.params_id": params["_id"], "prototype_id": {"$exists": False},
+                                        "pretty_formula": stoich}, fields={"structure": 1, "energy_per_site": 1})
+            if self.limit:
+                cur.sort('energy_per_site', pymongo.ASCENDING).limit(self.limit)
+
+            for doc in cur:
                 # Either get the prototype or insert this structure as a new one
                 structure = Structure.from_dict(doc["structure"])
                 if not splpy.util.is_structure_bad(structure):
