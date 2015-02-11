@@ -34,7 +34,7 @@ class SymmetryComparator(structure_matcher.AbstractComparator):
             SpeciesComparator.
         """
         if not hasattr(structure, 'spacegroup'):
-            sg = SymmetryFinder(structure, splpy.util.normalised_symmetry_precision(structure))
+            sg = SymmetryFinder(structure, splpy.util.normalised_symmetry_precision(structure), -1)
             structure.spacegroup = {"symbol": unicode(sg.get_spacegroup_symbol(), errors="ignore"),
                                     "number": sg.get_spacegroup_number(),
                                     "point_group": unicode(sg.get_point_group(), errors="ignore"),

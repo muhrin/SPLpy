@@ -16,7 +16,6 @@ __date__ = "Jan 27, 2015"
 
 import os
 import re
-import shutil
 import subprocess
 import StringIO
 import sys
@@ -24,8 +23,6 @@ import tempfile
 
 from pymatgen.core.structure import Structure
 import pymatgen.core.lattice
-
-import splpy.util
 
 
 # Copied from shutils Python 3.3
@@ -137,7 +134,6 @@ def structure_tidy(structure):
     tidy_exe_dir = os.path.dirname(os.path.abspath(tidy))
     os.environ["RIETAN"] = tidy_exe_dir
 
-    splpy.util.write_structures([structure], ['/tmp/bad'])
     with tempfile.NamedTemporaryFile('w') as f:
         f.write(generate_input(structure))
         f.flush()

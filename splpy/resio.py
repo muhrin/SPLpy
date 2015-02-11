@@ -147,7 +147,10 @@ class Res(MSONable):
             tokens = line.split()
             if tokens:
                 if tokens[0] == 'TITL':
-                    info = Res.parse_title(line)
+                    try:
+                        info = Res.parse_title(line)
+                    except ValueError:
+                        info = dict()
                 elif tokens[0] == 'CELL' and len(tokens) == 8:
                     abc = map(float, tokens[2:5])
                     ang = map(float, tokens[5:8])

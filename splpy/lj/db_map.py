@@ -62,7 +62,7 @@ class Prototype(object):
                 if "strukturbericht" in doc:
                     value = doc["structure_type"]
                 elif "pearson" in doc:
-                    value = "{} ({})".format(doc["spacegroup.symbol"], doc["pearson"])
+                    value = "{} ({})".format(doc["spacegroup"]["symbol"], doc["pearson"])
 
             if value:
                 proto_values[proto_id] = value
@@ -86,7 +86,7 @@ class StableStoichiometries(object):
         for doc in structure_docs:
             stoichs = db_hulls.get_stable_stoichiometries(query_engine.db, doc["potential.params_id"])
             if stoichs:
-                values[doc['_id']] = ", ".join(stoichs)
+                values[doc['_id']] = "+".join(sorted(stoichs))
         return values
 
 

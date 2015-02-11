@@ -80,6 +80,8 @@ def find_prototype(structure, db):
     prototypes = db[COLLECTION_NAME]
 
     structure = create_prototype(structure)
+    if not structure:
+        return None
     # Find spacegroup
     sg = SymmetryFinder(structure, _symm_precision, angle_tolerance=-1)
 
@@ -128,3 +130,38 @@ def insert_prototype(structure, db):
 
     return proto_id, True
 
+
+def get_all_same(proto_id, db):
+    # Get the prototypes collection
+    prototypes = db[COLLECTION_NAME]
+
+    cur = prototypes.find({'_id': proto_id,
+                           '$or': [{'structure_type': {'$exists': True}}, {'strukturbericht': {'$exists': True}}]},
+                          fields={'_id': False, 'structure_type': True, 'pearson': True, 'strukturbericht': True})
+    if cur.count() == 0:
+        return [proto_id]
+
+    info = cur[0]
+    return prototypes.find(info).distinct('_id')
+
+
+def get_label(proto_id, db):
+    # Get the prototypes collection
+    prototypes = db[COLLECTION_NAME]
+
+    cur = prototypes.find({'_id': proto_id},
+                          fields={'_id': False, 'structure_type': True, 'pearson': True,
+                                  'strukturbericht': True, 'extra_labels': True})
+    if cur.count() == 0:
+        return None
+
+    d = cur[0]
+    if 'strukturbericht' in d and d['strukturbericht']:
+        return d['strukturbericht']
+    elif 'structure_type' in d and d['structure_type']:
+        return d['structure_type']
+    elif 'extra_labels' in d and d['extra_labels']:
+        return ", ".join(
+            ["{}: {}".format(name, value) for name, value in d['extra_labels'].iteritems()])
+    else:
+        return str(proto_id)
