@@ -21,6 +21,8 @@ import StringIO
 import sys
 import tempfile
 
+import numpy as np
+
 from pymatgen.core.structure import Structure
 import pymatgen.core.lattice
 
@@ -96,7 +98,10 @@ def generate_input(structure):
     lines.append("".join(cell))
     for spec in structure:
         atom_line = ["{:8s}".format(spec.specie.symbol)]
-        atom_line.extend(["{:10.6f}".format(x) for x in spec.frac_coords])
+        # Need to be careful because structure_tidy doesn't like
+        # negative numbers, even -0
+        fcoords = np.abs(np.mod(spec.frac_coords, 1))
+        atom_line.extend(["{:10.6f}".format(x) for x in fcoords])
         lines.append("".join(atom_line))
     lines.extend(["end", "end"])
     return "\n".join(lines)

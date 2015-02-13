@@ -43,7 +43,9 @@ def create_prototype(structure):
 
     sg = SymmetryFinder(str_copy, _symm_precision, angle_tolerance=-1)
     # return structure_tidy.structure_tidy(sg.get_primitive_standard_structure())
-    return structure_tidy.structure_tidy(sg.find_primitive())
+    #return structure_tidy.structure_tidy(sg.find_primitive())
+    #return structure_tidy.structure_tidy(sg.get_refined_structure())
+    return sg.get_refined_structure()
 
 
 def create_transformations(structure):
@@ -123,7 +125,7 @@ def insert_prototype(structure, db):
         return proto_id, False
 
     prototype = create_prototype(structure)
-    sg = SymmetryFinder(structure, _symm_precision, angle_tolerance=-1)
+    sg = SymmetryFinder(prototype, _symm_precision, angle_tolerance=-1)
     d = {"structure": prototype.to_dict, "wyckoff_sites": get_wyckoff_sites(sg)}
     d.update(splpy.util.create_structure_db_info(prototype, sg))
     proto_id = db[COLLECTION_NAME].insert(d)

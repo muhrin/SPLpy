@@ -62,7 +62,7 @@ def init_criteria(args):
         pass
     try:
         if args.id:
-            criteria['_id'] = bson.objectid.ObjectId(args.id)
+            criteria['_id'] = {"$in": [bson.objectid.ObjectId(str_id) for str_id in args.id]}
     except AttributeError:
         pass
 
@@ -562,7 +562,7 @@ if __name__ == "__main__":
                            "{\"task_id\": 1}.")
     pget.add_argument("--collection", dest="collection", type=str, default=None, required=False,
                       help="The collection to get the structures from.")
-    pget.add_argument("--id", dest="id", type=str, default=None,
+    pget.add_argument("--id", dest="id", type=str, default=None, nargs='+',
                       help="id of the structure to retrieve.")
     pget.add_argument("--sort", dest="sort", type=str, default=[],
                       nargs='+', required=False,
