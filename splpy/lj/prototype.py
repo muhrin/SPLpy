@@ -44,8 +44,7 @@ def create_prototype(structure):
     sg = SymmetryFinder(str_copy, _symm_precision, angle_tolerance=-1)
     # return structure_tidy.structure_tidy(sg.get_primitive_standard_structure())
     #return structure_tidy.structure_tidy(sg.find_primitive())
-    #return structure_tidy.structure_tidy(sg.get_refined_structure())
-    return sg.get_refined_structure()
+    return structure_tidy.structure_tidy(sg.get_refined_structure())
 
 
 def create_transformations(structure):
