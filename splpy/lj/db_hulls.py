@@ -19,6 +19,8 @@ import tempfile
 
 import bson.objectid
 
+from pymatgen.core.composition import Composition
+
 import splpy.util as util
 import splpy.lj as lj
 import splpy.lj.db_structures as db_structures
@@ -37,8 +39,9 @@ def is_stable(db, structure_id):
         return None
 
     hulls_coll = db[HULLS_COLLECTION]
-    return hulls_coll.find(
-        {"entries": {"$elemMatch": {"structure_id": structure_id, "dist_above_hull": 0}}}).limit(1).count() == 1
+    return hulls_coll.find({
+        "params_id": params_id,
+        "entries": {"$elemMatch": {"structure_id": structure_id, "dist_above_hull": 0}}}).limit(1).count() == 1
 
 
 def get_stable_stoichiometries(db, params_id):
@@ -54,6 +57,27 @@ def get_stable_stoichiometries(db, params_id):
     if not aggregation['ok']:
         return None
     return set(doc['entries']['pretty_formula'] for doc in aggregation['result'])
+
+
+def get_hull(params_id, db):
+    if not ensure_hull(db, params_id):
+        return None
+    hulls_coll = db[HULLS_COLLECTION]
+
+    cur = hulls_coll.find({'params_id': params_id})
+    if cur.count() == 0:
+        return None
+
+    hull = dict()
+    for doc in cur:
+        for entry in doc['entries']:
+            comp = Composition(entry['pretty_formula'])
+            strs = hull.setdefault(comp, list())
+            strs.append({'structure_id': entry['structure_id'],
+                         'formation_energy': entry['formation_energy'],
+                         'dist_above_hull': entry['dist_above_hull']})
+
+    return get_endpoints(db, params_id), hull
 
 
 def get_stable_structure_ids(db, params_id):
@@ -116,13 +140,17 @@ def _regenerate_hull(db, hull_id):
         return None
 
     structures_coll = db[db_structures.STRUCTURES_COLLECTION]
-    docs = list(structures_coll.find(db_structures.get_params_id_criteria(params_id)))
+    #docs = list(structures_coll.find(db_structures.get_params_id_criteria(params_id)))
 
     # Save them to a temporary directory
     hull_dir = tempfile.mkdtemp()
     paths = list()
-    for doc in docs:
-        res = lj.util.create_writer(doc, "res")
+    for doc in list(structures_coll.find(db_structures.get_params_id_criteria(params_id))):
+        try:
+            res = lj.util.create_writer(doc, "res")
+        except ValueError:
+            _log.error("There's something wrong with structure {}, maybe NaN in atomic coordinates.".format(doc["_id"]))
+            continue
         path = "{}.res".format(doc["_id"])
         res.write_file(os.path.join(hull_dir, path))
         paths.append(path)

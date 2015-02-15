@@ -60,7 +60,7 @@ class Prototype(object):
                 value = doc["structure_type"]
             else:
                 if "strukturbericht" in doc:
-                    value = doc["structure_type"]
+                    value = doc["strukturbericht"]
                 elif "pearson" in doc:
                     value = "{} ({})".format(doc["spacegroup"]["symbol"], doc["pearson"])
 

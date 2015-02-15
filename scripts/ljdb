@@ -45,6 +45,7 @@ from splpy.lj.query_engine import LjQueryEngine
 import splpy.lj.db_map as db_map
 from splpy.lj.db_query import VisitationEngine
 import splpy.lj.db_crawl as db_crawl
+import splpy.lj.db_hulls as db_hulls
 
 _log = logging.getLogger(__name__)
 
@@ -286,6 +287,33 @@ def get_unique_from_db(args):
             print('')
 
 
+def do_hull(args):
+    d = mgdb.util.get_settings(args.config_file)
+    qe = LjQueryEngine(host=d["host"], port=d["port"], database=d["database"],
+                       user=d["readonly_user"], password=d["readonly_password"],
+                       collection=d["collection"], aliases_config=d.get("aliases_config", None))
+
+    for params_id in [bson.objectid.ObjectId(params_id) for params_id in args.id]:
+        endpoints, hull = db_hulls.get_hull(params_id, qe.db)
+
+        print("# composition {} formation_energy dist_above_hull structure_id".format(" ".join(endpoints)))
+        for comp, entries in hull.iteritems():
+            coords = [comp]
+            frac_comp = comp.get_fractional_composition()
+            for ep in endpoints:
+                amount = frac_comp.get(ep, 0.0)
+                coords.append(amount)
+            for entry in entries:
+                if entry['dist_above_hull'] > 0:
+                    continue
+                line = list()
+                line.extend(coords)
+                line.append(entry['formation_energy'])
+                line.append(entry['dist_above_hull'])
+                line.append(entry['structure_id'])
+                print(" ".join(map(str, line)))
+
+
 def map_from_db(args):
     def to_latex_string(interaction_string):
         tokens = interaction_string.split('.')
@@ -403,7 +431,6 @@ def map_from_db(args):
                 if doc['_id'] in mask_values:
                     map_points.append((doc[map_params[0]], doc[map_params[1]], mask_values[doc['_id']]))
             mask_data = splpy.map.generate_map(map_points)
-
 
         splpy.map.draw_map(map_data, 'matplotlib', settings=settings, output_name=str(formula), mask=mask_data)
 
@@ -582,6 +609,12 @@ if __name__ == "__main__":
                             help="From each point in parameter space and for each stoichiometry "
                                  "limit to this many structures")
     pgetunique.set_defaults(func=get_unique_from_db)
+
+    # The 'hull' subcommand
+    phull = subparsers.add_parser("hull", help="Get convex hull information.", parents=[parent_vb, parent_cfg])
+    phull.add_argument("--id", dest="id", type=str, default=None, nargs='+',
+                       help="parameter id(s) to get hull(s) for.")
+    phull.set_defaults(func=do_hull)
 
     # The 'map' subcommand.
     pmap = subparsers.add_parser("map",

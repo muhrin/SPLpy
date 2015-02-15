@@ -71,9 +71,10 @@ class MatplotlibOutputter:
         plt.scatter(x, y, color=color, s=size, zorder=1)
 
     def draw_mask(self, map_file, axes, settings):
-        line = map_file.readline().rstrip(os.linesep)
         found_mask = False
-        while line:
+        for line in map_file:
+            line = line.rstrip(os.linesep)
+
             if line == 'False':
                 found_mask = True
             if found_mask and line == 'Path':
@@ -82,8 +83,6 @@ class MatplotlibOutputter:
                 face_patch = mpatches.PathPatch(face_path, fill=True, color='gray', linewidth=0, alpha=0.5, zorder=5)
                 axes.add_patch(face_patch)
                 found_mask = False
-
-            line = map_file.readline().rstrip(os.linesep)
 
     def _parse_points(self, map_file):
         line = map_file.readline().rstrip(os.linesep)
@@ -191,12 +190,10 @@ class MatplotlibOutputter:
         return label_str
 
     def _draw(self, map_file, ax, settings=None):
-        line = map_file.readline()
-        while line:
+        for line in map_file:
             line = line.rstrip(os.linesep)
             if line != '':
                 self.draw_face(ax, map_file, line, settings)
-            line = map_file.readline()
 
 
 class LatexOutputter:
