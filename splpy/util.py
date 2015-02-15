@@ -4,6 +4,8 @@
 Module for helper functions and other things that don't fit neatly elsewhere.
 """
 
+import math
+
 import numpy as np
 from numpy import linalg as LA
 
@@ -127,6 +129,20 @@ def normalised_symmetry_precision(structure, precision=0.01):
 
 
 def is_structure_bad(structure):
+    # Is the lattice or are there any sites that are nan
+    if math.isnan(structure.lattice.volume):
+        return True
+
+    for site in structure:
+        if any(math.isnan(x) for x in site.coords):
+            return True
+
+    # Are there any atoms in the same position?
+    if structure.num_sites > 1:
+        dists = structure.distance_matrix
+        if dists[np.triu_indices(dists.shape[0], 1)].min() < 0.001:
+            return True
+
     # Check for max ratio between lattice parameters
     abc = structure.lattice.abc
     for i in range(0, 3):
