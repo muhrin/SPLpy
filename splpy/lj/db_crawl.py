@@ -381,6 +381,10 @@ class AssignPrototypes(object):
                 structure = Structure.from_dict(doc["structure"])
                 if not splpy.util.is_structure_bad(structure):
                     proto_id, is_new = prototype.insert_prototype(structure, query_engine.db)
+                    if proto_id is None:
+                        logger.warn("Failed to create find or create prototype for structure {}".format(doc["_id"]))
+                        continue
+
                     query_engine.collection.update({'_id': doc['_id']}, {"$set": {'prototype_id': proto_id}})
                     total_prototypes += 1
                     if is_new:

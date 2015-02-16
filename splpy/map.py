@@ -32,7 +32,9 @@ def parse_point(point):
 
 
 class MatplotlibOutputter:
-    def out(self, map_file, output_name=None, settings=None, mask=None):
+    def out(self, map_file, output_name=None, options=None, mask=None):
+        settings = self._init_settings(options)
+
         fig, ax = plt.subplots()
         output_file = output_name if output_name else "map"
         output_file += ".pdf"
@@ -55,7 +57,7 @@ class MatplotlibOutputter:
                 plt.ylabel(settings["ylabel"], fontsize=17)
 
         plt.draw()
-        plt.savefig(output_file, bbox_inches='tight')
+        plt.savefig(output_file, bbox_inches='tight', rasterized=settings['razterized'])
         plt.close()
 
     def draw_face(self, axes, map_file, label, settings):
@@ -80,7 +82,9 @@ class MatplotlibOutputter:
             if found_mask and line == 'Path':
                 codes, coords = self.parse_path(map_file)
                 face_path = mpath.Path(coords, codes, closed=True)
-                face_patch = mpatches.PathPatch(face_path, fill=True, color='gray', linewidth=0, alpha=0.5, zorder=5)
+                mask_settings = settings['mask']
+                face_patch = mpatches.PathPatch(face_path, fill=True, color=mask_settings['color'],
+                                                linewidth=0, alpha=mask_settings['alpha'], zorder=5)
                 axes.add_patch(face_patch)
                 found_mask = False
 
@@ -194,6 +198,18 @@ class MatplotlibOutputter:
             line = line.rstrip(os.linesep)
             if line != '':
                 self.draw_face(ax, map_file, line, settings)
+
+    def _init_settings(self, settings):
+        # Put the defaults here
+        defaults = {
+            'razterized': False,
+            'mask': {
+                'color': 'gray',
+                'alpha': 0.4,
+            }
+        }
+        defaults.update(settings)
+        return defaults
 
 
 class LatexOutputter:

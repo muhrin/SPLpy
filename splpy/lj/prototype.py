@@ -42,9 +42,21 @@ def create_prototype(structure):
     str_copy.scale_lattice(str_copy.num_sites)
 
     sg = SymmetryFinder(str_copy, _symm_precision, angle_tolerance=-1)
-    # return structure_tidy.structure_tidy(sg.get_primitive_standard_structure())
-    #return structure_tidy.structure_tidy(sg.find_primitive())
-    return structure_tidy.structure_tidy(sg.get_refined_structure())
+    proto = structure_tidy.structure_tidy(sg.get_refined_structure())
+
+    # Sometimes structure tidy fails, especially for large conventional unit cells,
+    # in which case try with the primitive unit cell
+    if not proto:
+        logger.warn("Problem generating structure prototype, structure_tidy probabily failed.  Trying with primitive.")
+        proto = structure_tidy.structure_tidy(sg.find_primitive())
+
+        # If it still didn't work just use the standard conventional cell approach in pymatgen
+        if not proto:
+            logger.warn("Failed to get structure_tidy to work with primitive, "
+                        "trying pymargen get_conventional_standard_structure.")
+            proto = sg.get_conventional_standard_structure()
+
+    return proto
 
 
 def create_transformations(structure):
@@ -124,6 +136,9 @@ def insert_prototype(structure, db):
         return proto_id, False
 
     prototype = create_prototype(structure)
+    if not prototype:
+        return None, None
+
     sg = SymmetryFinder(prototype, _symm_precision, angle_tolerance=-1)
     d = {"structure": prototype.to_dict, "wyckoff_sites": get_wyckoff_sites(sg)}
     d.update(splpy.util.create_structure_db_info(prototype, sg))
