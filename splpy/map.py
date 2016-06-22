@@ -16,6 +16,10 @@ import StringIO
 import subprocess
 import tempfile
 
+import matplotlib
+# Make sure matplotlib doesn't try to use an xserver requiring backend by default
+# Must be before importing matplotlib.pyplot or pylab!
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.path as mpath
 import matplotlib.patches as mpatches
@@ -56,21 +60,25 @@ class MatplotlibOutputter:
             if "ylabel" in settings:
                 plt.ylabel(settings["ylabel"], fontsize=17)
 
+        plt.rc('pdf', fonttype=42)
+        plt.rc('ps', fonttype=42)
         plt.draw()
-        plt.savefig(output_file, bbox_inches='tight', rasterized=settings['razterized'])
+        plt.savefig(output_file, bbox_inches='tight', dpi=600)
         plt.close()
 
     def draw_face(self, axes, map_file, label, settings):
         line = map_file.readline().rstrip(os.linesep)
         if line == 'Points':
             x, y = self._parse_points(map_file)
-            self.draw_points(x, y, self.get_property(label, 'color', settings), 0.3)
+            self.draw_points(x, y, self.get_property(label, 'color', settings), 2, settings)
 
         codes, coords = self.parse_path(map_file)
         self._draw_path(axes, coords, codes, settings, label=label)
 
-    def draw_points(self, x, y, color, size):
-        plt.scatter(x, y, color=color, s=size, zorder=1)
+    def draw_points(self, x, y, color, size, settings):
+        path = plt.scatter(x, y, color=color, s=size, lw=0, zorder=1)
+        path.set_rasterized(settings['rasterized'])
+
 
     def draw_mask(self, map_file, axes, settings):
         found_mask = False
@@ -83,8 +91,9 @@ class MatplotlibOutputter:
                 codes, coords = self.parse_path(map_file)
                 face_path = mpath.Path(coords, codes, closed=True)
                 mask_settings = settings['mask']
-                face_patch = mpatches.PathPatch(face_path, fill=True, color=mask_settings['color'],
-                                                linewidth=0, alpha=mask_settings['alpha'], zorder=5)
+                face_patch = mpatches.PathPatch(face_path, fill=True, facecolor=mask_settings['color'],
+                                                edgecolor='#000000', linewidth=0,
+                                                alpha=mask_settings['alpha'], zorder=5)
                 axes.add_patch(face_patch)
                 found_mask = False
 
@@ -150,17 +159,17 @@ class MatplotlibOutputter:
             rep_pt = None
             poly = Polygon(poly_coords)
             num_points = len(poly_coords)
-            if poly.is_valid and poly.area > 0.085:
+            if poly.is_valid and poly.area > 0.075:
                 rep_pt = poly.representative_point()
-                fontsize = min(28 * math.sqrt(poly.area) + 2.0, 22)
-            elif num_points > 50:
+                fontsize = min(26 * math.sqrt(poly.area) + 2.0, 20)
+            elif num_points > 45:
                 sum_x = 0.0
                 sum_y = 0.0
                 for coord in coords:
                     sum_x += coord[0]
                     sum_y += coord[1]
                 rep_pt = point.Point([sum_x / float(num_points), sum_y / float(num_points)])
-                fontsize = min(float(num_points) / 10.0, 22)
+                fontsize = min(float(num_points) / 12.0, 20)
             if rep_pt:
                 color = self.get_property(label, 'color', settings)
                 plt.text(rep_pt.x, rep_pt.y, self.get_label_string(label, settings), size=fontsize,

@@ -14,7 +14,7 @@ __date__ = "Aug 2, 2014"
 from abc import ABCMeta, abstractmethod
 
 import pymatgen
-from pymatgen.serializers.json_coders import MSONable
+from monty.json import MSONable
 import pymatgen.io.cifio
 
 from splpy.util import OrderedPair

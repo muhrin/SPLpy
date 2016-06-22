@@ -12,8 +12,9 @@ __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "July 23, 2014"
 
-import bson.objectid
+
 import pymongo
+from bson.objectid import ObjectId
 
 from matgendb.query_engine import QueryEngine
 
@@ -179,10 +180,10 @@ class LjQueryEngine(QueryEngine):
         except KeyError:
             pass
 
-        for key, value in criteria.iteritems():
+        for key, value in criteria.items():
             try:
                 if value.startswith("ObjectId"):
-                    parsed_crit[key] = bson.objectid.ObjectId(value[10:len(value) - 2])
+                    parsed_crit[key] = ObjectId(value[10:len(value) - 2])
             except AttributeError:
                 pass
         # Remove the ones we've dealt with

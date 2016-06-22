@@ -19,7 +19,7 @@ from monty.io import zopen
 
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.structure import Structure
-from pymatgen.serializers.json_coders import MSONable
+from monty.json import MSONable
 
 
 class Res(MSONable):

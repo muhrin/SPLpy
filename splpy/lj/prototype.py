@@ -30,6 +30,25 @@ logger = logging.getLogger(__name__)
 _symm_precision = 0.01
 
 
+def get_conventional(structure):
+    sg = SymmetryFinder(structure, _symm_precision, angle_tolerance=-1)
+    proto = structure_tidy.structure_tidy(sg.get_refined_structure())
+
+    # Sometimes structure tidy fails, especially for large conventional unit cells,
+    # in which case try with the primitive unit cell
+    if not proto:
+        logger.warn("Problem generating structure prototype, structure_tidy probabily failed.  Trying with primitive.")
+        proto = structure_tidy.structure_tidy(sg.find_primitive())
+
+        # If it still didn't work just use the standard conventional cell approach in pymatgen
+        if not proto:
+            logger.warn("Failed to get structure_tidy to work with primitive, "
+                        "trying pymargen get_conventional_standard_structure.")
+            proto = sg.get_conventional_standard_structure()
+
+    return proto
+
+
 def create_prototype(structure):
     reduced_comp = structure.composition.reduced_composition
     # Sort the composition from lowest number of particular species to highest

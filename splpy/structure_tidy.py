@@ -108,7 +108,7 @@ def generate_input(structure):
 
 
 def parse_output(output):
-    p = re.compile('(\D)+\d*')
+    p = re.compile('(\D+)\d*')
     line = output.readline()
     while line:
         if line.startswith(" gamma/gamma(min) = 1.0000"):
@@ -133,6 +133,9 @@ def parse_output(output):
 
 
 def structure_tidy(structure):
+    if not structure.is_ordered:
+        return None
+
     tidy = which("structure_tidy")
     if not tidy:
         return None

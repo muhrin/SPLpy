@@ -20,7 +20,9 @@ import pymatgen as mg
 
 import splpy.interval as interval
 import splpy.lj.db_query
-import splpy.lj.util as util
+from splpy.util import write_structures, is_structure_bad
+
+from splpy.lj.util import add_to_criteria
 from splpy.lj.util import Criteriable
 import splpy.util
 
@@ -218,7 +220,7 @@ class VisitParamPoints(object):
     def __call__(self, query_engine, criteria, callback):
         for params_id in query_engine.get_param_ids(self._params_criteria):
             crit = copy.deepcopy(criteria) if criteria else dict()
-            util.add_to_criteria(crit, "potential.params_id", params_id)
+            add_to_criteria(crit, "potential.params_id", params_id)
             callback(crit)
 
     def num_points(self, query_engine):
@@ -249,7 +251,7 @@ def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_do
                 entries = formula_dict.setdefault(spacegroup, list())
 
                 structure = mg.Structure.from_dict(doc["structure"])
-                if not splpy.util.is_structure_bad(structure):
+                if not is_structure_bad(structure):
                     # Store the document with the structure so we can use it later
                     structure.splpy_doc = doc
 
@@ -262,7 +264,7 @@ def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_do
                                 break
                         except MemoryError:
                             logger.error("Ran out of memory trying to compare structures, can't get unique.")
-                            splpy.util.write_structures(structure, doc["_id"])
+                            write_structures(structure, doc["_id"])
                             logger.info("Bad structure saved to local folder.")
                             keep = False
                             break
