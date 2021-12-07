@@ -4,7 +4,7 @@
 Created on Jul 22, 2014
 """
 
-from __future__ import division
+
 from splpy.util import OrderedPair
 
 __author__ = "Martin Uhrin"
@@ -16,7 +16,9 @@ __date__ = "Jul 22, 2014"
 
 import unittest
 
-from splpy.lj.db_query import LennardJonesSearchRange, HalfOpenInterval
+from splpy.lj import db_query
+from splpy.lj.db_query import LennardJonesSearchRange
+from splpy import interval
 
 
 class OrderedPairTest(unittest.TestCase):
@@ -32,16 +34,15 @@ class LennardJonesSearchRangeTest(unittest.TestCase):
         r = LennardJonesSearchRange()
 
         interactions = list()
-        interactions.append(OrderedPair("A", "B"))
         interactions.append(1.0)
-        interactions.append(HalfOpenInterval(1.0, 1.5))
+        interactions.append(interval.LeftClosedRightOpen(1.0, 1.5))
         interactions.append(12)
         interactions.append(6)
         interactions.append(2.5)
 
-        r.add_interaction(LennardJonesSearchRange.InteractionRange(*interactions))
+        r.add_interaction("A", "B", db_query.InteractionRange(*interactions))
 
-        print r.to_criteria()
+        print((r.to_criteria()))
 
 
 

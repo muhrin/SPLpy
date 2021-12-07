@@ -4,7 +4,7 @@
 Created on Apr 17, 2012
 """
 
-from __future__ import division
+
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2014, Martin Uhrin"
@@ -16,7 +16,7 @@ __date__ = "Feb 14, 2014"
 import unittest
 import os
 
-from pymatgen import Composition, Lattice, Structure
+from pymatgen.core import Composition, Lattice, Structure
 from splpy.resio import Res
 
 test_dir = os.path.dirname(__file__)
@@ -27,7 +27,7 @@ class ResTest(unittest.TestCase):
         filepath = os.path.join(test_dir, 'input/23221-ZDsSsJoEW14.res')
         res = Res.from_file(filepath)
         comp = res.structure.composition
-        self.assertEqual(comp, Composition.from_formula("C194H60"))
+        self.assertEqual(comp, Composition("C194H60"))
         #print res
 
         res_string = """TITL
@@ -38,7 +38,7 @@ Si 1 0.000000 0.000000 0.000000 1.0
 F 2 0.750000 0.500000 0.750000 1.0"""
         res = Res.from_string(res_string)
         self.assertEqual(res.structure.composition, Composition("SiF"))
-        self.assertEquals(res.structure.num_sites, 2)
+        self.assertEqual(res.structure.num_sites, 2)
         #print res
 
         struct = Structure(Lattice.orthorhombic(2.5, 3.5, 7.0), ['Na', 'Cl'], [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])

@@ -55,7 +55,7 @@ def create_prototype(structure):
     els = sorted(reduced_comp.elements, key=lambda e: reduced_comp[e])
 
     # Convert the structure species to be A, B, C etc ordered in increasing quantity
-    trans = SubstitutionTransformation(dict(zip(els, map(chr, range(ord('A'), ord('A') + len(els))))))
+    trans = SubstitutionTransformation(dict(list(zip(els, list(map(chr, list(range(ord('A'), ord('A') + len(els)))))))))
     str_copy = trans.apply_transformation(structure)
     # Scale the volume to be 1 unit per atom
     str_copy.scale_lattice(str_copy.num_sites)
@@ -96,10 +96,10 @@ def create_transformations(structure):
     last_el = ord('A')
     for group in specie_groups:
         new_mappings = list()
-        for perm in itertools.permutations(map(chr, range(last_el, last_el + len(group)))):
+        for perm in itertools.permutations(list(map(chr, list(range(last_el, last_el + len(group)))))):
             for mapping in mappings:
                 new_mappings.append(mapping.copy())
-                new_mappings[-1].update(zip(group, perm))
+                new_mappings[-1].update(list(zip(group, perm)))
 
         mappings = new_mappings
         last_el += len(group)
@@ -197,6 +197,6 @@ def get_label(proto_id, db):
         return d['structure_type']
     elif 'extra_labels' in d and d['extra_labels']:
         return ", ".join(
-            ["{}: {}".format(name, value) for name, value in d['extra_labels'].iteritems()])
+            ["{}: {}".format(name, value) for name, value in list(d['extra_labels'].items())])
     else:
         return str(proto_id)

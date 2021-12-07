@@ -86,10 +86,10 @@ def create_structure_db_info(structure, spacegroup=None):
               "nsites": comp.num_atoms,
               "chemsys": "-".join(sorted(el_amt.keys()))})
 
-    d["spacegroup"] = {"symbol": unicode(spacegroup.get_spacegroup_symbol(),
+    d["spacegroup"] = {"symbol": str(spacegroup.get_spacegroup_symbol(),
                                          errors="ignore"),
                        "number": spacegroup.get_spacegroup_number(),
-                       "point_group": unicode(spacegroup.get_point_group(),
+                       "point_group": str(spacegroup.get_point_group(),
                                               errors="ignore"),
                        "source": "spglib",
                        "crystal_system": spacegroup.get_crystal_system(),

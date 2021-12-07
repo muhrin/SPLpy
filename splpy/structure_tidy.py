@@ -5,7 +5,7 @@ An interface for using structure tidy to standardise a structure
 
 """
 
-from __future__ import division
+
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2012, Martin Uhrin"
@@ -17,7 +17,7 @@ __date__ = "Jan 27, 2015"
 import os
 import re
 import subprocess
-import StringIO
+import io
 import sys
 import tempfile
 
@@ -114,7 +114,7 @@ def parse_output(output):
         if line.startswith(" gamma/gamma(min) = 1.0000"):
             # This line has format: ' Cell parameters :   1.0802  1.0802  6.0100   89.974   89.974   86.583'
             tokens = [t for t in output.readline().split() if t]
-            lattice = pymatgen.core.lattice.Lattice.from_parameters(*map(float, tokens[3:9]))
+            lattice = pymatgen.core.lattice.Lattice.from_parameters(*list(map(float, tokens[3:9])))
 
             species = list()
             coords = list()
@@ -124,7 +124,7 @@ def parse_output(output):
             while tokens:
                 match = p.match(tokens[0])
                 species.append(match.group(1))
-                coords.append(map(float, tokens[1:4]))
+                coords.append(list(map(float, tokens[1:4])))
                 tokens = [t for t in output.readline().split() if t]
 
             return Structure(lattice, species, coords)
@@ -146,7 +146,7 @@ def structure_tidy(structure):
         f.write(generate_input(structure))
         f.flush()
         proc = subprocess.Popen([tidy, f.name], stdout=subprocess.PIPE)
-        output = StringIO.StringIO()
+        output = io.StringIO()
         output.write(proc.communicate()[0])
         output.seek(0, 0)
         tidy_structure = parse_output(output)

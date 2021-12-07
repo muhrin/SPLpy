@@ -236,7 +236,7 @@ class LjToDbTaskDrone(AbstractDrone):
         except Exception as ex:
             import traceback
 
-            print
+            print()
             traceback.format_exc(ex)
             logger.error(traceback.format_exc(ex))
             return False
@@ -285,10 +285,10 @@ class LjToDbTaskDrone(AbstractDrone):
 
         # Figure out the symmetry group
         sg = SymmetryFinder(s, util.normalised_symmetry_precision(s), -1)
-        d["spacegroup"] = {"symbol": unicode(sg.get_spacegroup_symbol(),
+        d["spacegroup"] = {"symbol": str(sg.get_spacegroup_symbol(),
                                              errors="ignore"),
                            "number": sg.get_spacegroup_number(),
-                           "point_group": unicode(sg.get_point_group(),
+                           "point_group": str(sg.get_point_group(),
                                                   errors="ignore"),
                            "source": "spglib",
                            "crystal_system": sg.get_crystal_system(),
@@ -351,7 +351,7 @@ class LjToDbTaskDrone(AbstractDrone):
         (parent, subdirs, files) = path
         dirs = list()
         for potparam_file in glob.glob(os.path.join(parent, "*.potparams")):
-            for dir in Potparams.from_file(potparam_file).params.keys():
+            for dir in list(Potparams.from_file(potparam_file).params.keys()):
                 abs_dir = os.path.join(parent, dir)
                 if os.path.exists(abs_dir):
                     dirs.append(abs_dir)

@@ -12,7 +12,7 @@ __date__ = "Dec 30, 2014"
 import math
 import os
 import re
-import StringIO
+import io
 import subprocess
 import tempfile
 
@@ -240,7 +240,7 @@ class LatexOutputter:
                 finished_points = True
                 break
             x, y = parse_point(line)
-            print('{} {}'.format(x, y))
+            print(('{} {}'.format(x, y)))
             line = map_file.readline().rstrip(os.linesep)
 
         print('};')
@@ -248,19 +248,19 @@ class LatexOutputter:
 
     @classmethod
     def draw_path(cls, map_file, label):
-        print('\draw '),
+        print(('\draw '), end=' ')
         line = map_file.readline().rstrip(os.linesep)
         while line:
             command = line[:6]
             if command == 'MOVETO':
-                print('(axis cs: {})'.format(line[8:-1])),
+                print(('(axis cs: {})'.format(line[8:-1])), end=' ')
             elif command == 'LINETO':
-                print('-- (axis cs: {})'.format(line[8:-1])),
+                print(('-- (axis cs: {})'.format(line[8:-1])), end=' ')
             elif command == 'CURVE4':
                 match = re.search(r'\((.+)\), \((.+)\), \((.+)\)', line[7:])
-                print('.. controls (axis cs: {}) and (axis cs: {}) .. (axis cs: {})').format(match.group(1),
+                print(('.. controls (axis cs: {}) and (axis cs: {}) .. (axis cs: {})').format(match.group(1),
                                                                                              match.group(2),
-                                                                                             match.group(3)),
+                                                                                             match.group(3)), end=' ')
             else:
                 print(';')
                 return
@@ -278,7 +278,7 @@ class LatexOutputter:
 
 
 def generate_map(map_points):
-    output = StringIO.StringIO()
+    output = io.StringIO()
     with tempfile.NamedTemporaryFile('w') as f:
         for pt in map_points:
             f.write('{},{},{}\n'.format(pt[0], pt[1], pt[2]))

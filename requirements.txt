@@ -1,6 +1,6 @@
 nose
 pymatgen
-pymatgen-db
+pymatgen-db>=0.4.1
 pymongo
 matplotlib
 shapely

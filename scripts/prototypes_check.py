@@ -73,7 +73,7 @@ for doc in structures.find({"prototype_id": {"$exists": True}, "spacegroup.numbe
     #     splpy.util.write_structures([proto, str], ['proto', 'str'])
     if str_wyckoff != proto_wyckoff:
         different += 1
-        print("{} {}".format(str_wyckoff == proto_wyckoff, sg_str.get_spacegroup_number()))
+        print(("{} {}".format(str_wyckoff == proto_wyckoff, sg_str.get_spacegroup_number())))
     else:
         same += 1
-    print("Same: {}, Different: {}, Percent: {}".format(same, different, float(different)/float(same+different)))
+    print(("Same: {}, Different: {}, Percent: {}".format(same, different, float(different)/float(same+different))))

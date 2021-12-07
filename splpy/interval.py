@@ -4,7 +4,7 @@
 Module implementing an Res file object class.
 """
 
-from __future__ import division
+
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2014, Martin Uhrin"
@@ -19,9 +19,7 @@ from abc import abstractproperty
 import re
 
 
-class Interval(object):
-
-    __metaclass__ = ABCMeta
+class Interval(object, metaclass=ABCMeta):
 
     def __init__(self, start, end):
         """Construct, start must be <= end."""

@@ -122,9 +122,9 @@ def _generate_entry(structure, params, name, energy, pressure):
 
     # Figure out the symmetry group
     sg = SymmetryFinder(structure, normalised_symmetry_precision(structure), -1)
-    entry["spacegroup"] = {"symbol": unicode(sg.get_spacegroup_symbol(), errors="ignore"),
+    entry["spacegroup"] = {"symbol": str(sg.get_spacegroup_symbol(), errors="ignore"),
                            "number": sg.get_spacegroup_number(),
-                           "point_group": unicode(sg.get_point_group(), errors="ignore"),
+                           "point_group": str(sg.get_point_group(), errors="ignore"),
                            "source": "spglib",
                            "crystal_system": sg.get_crystal_system(),
                            "hall": sg.get_hall()}

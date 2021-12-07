@@ -12,7 +12,7 @@ __date__ = "Jan 20, 2015"
 
 import logging
 import os
-import StringIO
+import io
 import shutil
 import subprocess
 import tempfile
@@ -158,7 +158,7 @@ def _regenerate_hull(db, hull_id):
     # Calculate formation enthalpies and distance above hull
     proc = subprocess.Popen(["sinfo", "-nf", "-i", "$f$,$rfo$,$hf$,$hd$\n"],
                             cwd=hull_dir, stdout=subprocess.PIPE, stdin=subprocess.PIPE, universal_newlines=True)
-    output = StringIO.StringIO()
+    output = io.StringIO()
     output.write(proc.communicate(" ".join(paths))[0])
     # Delete the temporary folder
     shutil.rmtree(hull_dir)

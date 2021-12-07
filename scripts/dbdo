@@ -1,0 +1,379 @@
+#!/usr/bin/env python
+
+"""
+A helper script for doings things on the LJ database
+"""
+
+import argparse
+import csv
+import json
+import logging
+import os
+import re
+import StringIO
+import subprocess
+import sys
+import yaml
+
+import numpy as np
+
+import bson.objectid
+
+from pymatgen.core.structure import Structure
+from pymatgen.symmetry.finder import SymmetryFinder
+
+import pymongo
+
+import matgendb as mgdb
+import matgendb.util
+
+from splpy.lj.query_engine import LjQueryEngine
+import splpy.lj.prototype as prototype
+import splpy.lj.db_hulls as hulls
+import splpy.util
+
+_log = logging.getLogger(__name__)
+
+
+def proto_min(x0, x1):
+    if not x0:
+        return x1
+    if not x1:
+        return x0
+    return min(x0, x1)
+
+
+def energy_dist_to_lowest_other(structure_doc, proto_ids, db):
+    # Get structures at the current parameter point, with the same composition,
+    # but a different prototype from the current structure
+    crit = {'potential.params_id': structure_doc['potential']['params_id'],
+            'pretty_formula': structure_doc['pretty_formula'],
+            'prototype_id': {"$nin": proto_ids},
+            'energy_per_site': {'$exists': True}}
+
+    cur = db['structures'].find(crit).sort('energy_per_site', pymongo.ASCENDING).limit(1)
+    if cur.count(True) == 0:
+        return None
+
+    return cur[0]['energy_per_site'] - structure_doc['energy_per_site']
+
+
+def parse_aflow_prototype(output):
+    # Skip the first two lines
+    output.readline()
+    output.readline()
+    lattice = list()
+    for i in range(0, 3):
+        vec = [float(t) for t in output.readline().split() if t]
+        lattice.append(vec)
+    # Skip the next two lines
+    output.readline()
+    output.readline()
+
+    species = list()
+    coords = list()
+    line = output.readline()
+    while line:
+        toks = [t for t in line.split() if t]
+        coords.append(map(float, toks[0:3]))
+        species.append(toks[3])
+
+        line = output.readline()
+
+    if not lattice or not lattice[0]:
+        return None
+    return Structure(lattice, species, coords)
+
+
+def get_aflow_prototype(num):
+    proc = subprocess.Popen(["aflow", "--proto={}".format(num)], stdout=subprocess.PIPE)
+    output = StringIO.StringIO()
+    output.write(proc.communicate()[0])
+    output.seek(0, 0)
+    proto = parse_aflow_prototype(output)
+    output.close()
+
+    return proto
+
+
+def find_curatrolo_prototypes(args):
+    d = mgdb.util.get_settings(args.config_file)
+    qe = LjQueryEngine(host=d["host"], port=d["port"], database=d["database"],
+                       user=d["readonly_user"], password=d["readonly_password"],
+                       collection=d["collection"], aliases_config=d.get("aliases_config", None))
+
+    num_re = re.compile('(\d+)')
+    proto_info = dict()
+    with open(args.proto_file, 'rb') as csvfile:
+        protoreader = csv.reader(csvfile, delimiter='\t', quotechar='"')
+        for row in protoreader:
+            if row:
+                match = num_re.search(row[0])
+                if match:
+                    num = int(match.group(1))
+                    print(num)
+                    # Run aflow to get the prototype out
+                    proto = get_aflow_prototype(num)
+                    if not proto:
+                        continue
+
+                    proto_id = prototype.find_prototype(proto, qe.db)
+                    if proto_id:
+                        info = dict()
+                        if row[1]:
+                            info['pearson'] = row[1].strip()
+                        if row[3]:
+                            info['strukturbericht'] = row[3].strip()
+                        if row[4]:
+                            info['structure_type'] = row[4].strip()
+                        proto_info[str(proto_id)] = info
+                    else:
+                        print("Couldn't find proto with info: {}".format(" ".join(row)))
+
+    print(yaml.dump(proto_info, default_flow_style=False))
+
+
+def get_proto_dists(args):
+    d = mgdb.util.get_settings(args.config_file)
+    qe = LjQueryEngine(host=d["host"], port=d["port"], database=d["database"],
+                       user=d["readonly_user"], password=d["readonly_password"],
+                       collection=d["collection"], aliases_config=d.get("aliases_config", None))
+
+    structures_coll = qe.collection
+
+    dist_function = energy_dist_to_lowest_other
+
+    proto_groups = list()
+    proto_ids_done = set()
+    for proto_id in [bson.objectid.ObjectId(i) for i in args.id]:
+        # Skip over anything we've dealt with
+        if proto_id in proto_ids_done:
+            continue
+
+        proto_groups.append(prototype.get_all_same(proto_id, qe.db))
+        # Make sure we get rid of any duplicates that the user has entered
+        for new_id in proto_groups[-1]:
+            proto_ids_done.add(new_id)
+
+    for group in proto_groups:
+        values = []
+        label = prototype.get_label(group[0], qe.db)
+        for params_id in structures_coll.find({'prototype_id': {"$in": group}}).distinct("potential.params_id"):
+            for formula in structures_coll.find({'potential.params_id': params_id, 'prototype_id': {"$in": group}}) \
+                    .distinct('pretty_formula'):
+                crit = {'potential.params_id': params_id,
+                        'prototype_id': {"$in": group},
+                        'pretty_formula': formula,
+                        'energy_per_site': {'$exists': True}}
+                cur = structures_coll.find(crit).sort('energy_per_site', pymongo.ASCENDING).limit(1)
+                if cur.count(True) == 0:
+                    continue
+
+                value = dist_function(cur[0], group, qe.db)
+                if value is not None:
+                    values.append(value)
+
+        # Print out some stats on the values
+        print("{} entries: {}, min: {}, max: {}, mean: {}, std: {}".format(label, len(values),
+                                                                           np.min(values), np.max(values),
+                                                                           np.mean(values), np.std(values)))
+
+
+def do_count_gs(args):
+    d = mgdb.util.get_settings(args.config_file)
+    qe = LjQueryEngine(host=d["host"], port=d["port"], database=d["database"],
+                       user=d["readonly_user"], password=d["readonly_password"],
+                       collection=d["collection"], aliases_config=d.get("aliases_config", None))
+
+    structures_coll = qe.collection
+
+    proto_groups = list()
+    proto_ids_done = set()
+    for proto_id in [bson.objectid.ObjectId(i) for i in args.id]:
+        # Skip over anything we've dealt with
+        if proto_id in proto_ids_done:
+            continue
+
+        proto_groups.append(prototype.get_all_same(proto_id, qe.db))
+        # Make sure we get rid of any duplicates that the user has entered
+        for new_id in proto_groups[-1]:
+            proto_ids_done.add(new_id)
+
+    for group in proto_groups:
+        num_gs = 0
+        num_on_hull = 0
+        total = 0
+        label = prototype.get_label(group[0], qe.db)
+        for params_id in structures_coll.find({'prototype_id': {"$in": group}}).distinct("potential.params_id"):
+            for formula in structures_coll.find({'potential.params_id': params_id, 'prototype_id': {"$in": group}}) \
+                    .distinct('pretty_formula'):
+                crit = {'potential.params_id': params_id, 'pretty_formula': formula}
+                cur = structures_coll.find(crit, fields={'prototype_id': True}).\
+                    sort('energy_per_site', pymongo.ASCENDING).limit(1)
+                if cur.count(True) != 0:
+                    doc = cur[0]
+                    if 'prototype_id' in doc and doc['prototype_id'] in group:
+                        num_gs += 1
+                        if hulls.is_stable(qe.db, doc['_id']):
+                            num_on_hull += 1
+
+                total += 1
+
+        # Print out the count
+        if total:
+            print("{}: gs: {} hull: {} total: {}".format(label, num_gs, num_on_hull, total))
+
+
+def do_count_protos(args):
+    d = mgdb.util.get_settings(args.config_file)
+    qe = LjQueryEngine(host=d["host"], port=d["port"], database=d["database"],
+                       user=d["readonly_user"], password=d["readonly_password"],
+                       collection=d["collection"], aliases_config=d.get("aliases_config", None))
+
+    structures_coll = qe.collection
+    protos_coll = qe.db['prototypes']
+
+    for proto_doc in protos_coll.find({}, {"_id": 1, "pretty_formula": 1, "spacegroup.number": 1}):
+        proto_id = proto_doc['_id']
+        label = prototype.get_label(proto_id, qe.db)
+        print("{} {} {} {}".format(structures_coll.find({'prototype_id': proto_id}).count(),
+                                   proto_doc['pretty_formula'], proto_doc['spacegroup']['number'], label))
+
+
+def do_fix_protos(args):
+    d = mgdb.util.get_settings(args.config_file)
+    qe = LjQueryEngine(host=d["host"], port=d["port"], database=d["database"],
+                       user=d["readonly_user"], password=d["readonly_password"],
+                       collection=d["collection"], aliases_config=d.get("aliases_config", None))
+
+    protos_coll = qe.db['prototypes']
+
+    with open(args.known_protos) as protos_file:
+        protos = yaml.load(protos_file)
+        for proto_id in protos.keys():
+            obj_id = bson.objectid.ObjectId(proto_id)
+            proto_doc = protos_coll.find({"_id": obj_id}).limit(1)[0]
+            proto = prototype.create_prototype(Structure.from_dict(proto_doc['structure']))
+            sg = SymmetryFinder(proto, 0.01, angle_tolerance=-1)
+            d = {"structure": proto.to_dict, "wyckoff_sites": prototype.get_wyckoff_sites(sg)}
+            d.update(splpy.util.create_structure_db_info(proto, sg))
+            protos_coll.update({'_id': obj_id}, {"$set": d})
+
+        proto_ids = [bson.objectid.ObjectId(proto_id) for proto_id in protos.keys()]
+        #protos_coll.remove({'_id': {'$nin': proto_ids}}, multi=True)
+
+
+
+def parse_criteria_or_die(crit):
+    criteria = None
+    if crit:
+        try:
+            criteria = json.loads(crit)
+        except ValueError:
+            print("Criteria {} is not a valid JSON string!".format(crit))
+            sys.exit(-1)
+    return criteria
+
+
+def init_criteria(args):
+    criteria = parse_criteria_or_die(args.criteria)
+    if criteria is None:
+        criteria = dict()
+
+    try:
+        if args.stoichiometry:
+            criteria['pretty_formula'] = args.stoichiometry.reduced_formula
+    except AttributeError:
+        pass
+    try:
+        if args.id:
+            criteria['_id'] = bson.objectid.ObjectId(args.id)
+    except AttributeError:
+        pass
+
+    for key, value in criteria.iteritems():
+        try:
+            if value.startswith("ObjectId"):
+                criteria[key] = bson.objectid.ObjectId(value[10:len(value) - 2])
+        except AttributeError:
+            pass
+
+    return criteria
+
+
+parser = argparse.ArgumentParser(description="""Do things on the LJ database""")
+
+parent_vb = argparse.ArgumentParser(add_help=False)
+parent_vb.add_argument('--quiet', '-q', dest='quiet', action="store_true", default=False,
+                       help="Minimal verbosity.")
+parent_vb.add_argument('--verbose', '-v', dest='vb', action="count", default=0,
+                       help="Print more verbose messages to standard error. Repeatable. (default=ERROR)")
+parent_cfg = argparse.ArgumentParser(add_help=False)
+parent_cfg.add_argument("-c", "--config", dest="config_file", type=str, default="ljdb.json",
+                        help="Config file to use. Generate one using mgdb "
+                             "init --config filename.json if necessary. "
+                             "Otherwise, the code searches for an ljdb.json first"
+                             "then ~/.ljdb.json. If none is found, an no-authentication "
+                             "localhost:27017/lj database and structures "
+                             "collection is assumed.")
+
+# Init for all subparsers.
+subparsers = parser.add_subparsers()
+
+# The 'proto_dist' subcommand.
+proto_dist = subparsers.add_parser("proto_dist",
+                                   help="Find the energy distance from a prototype to first metastable.",
+                                   parents=[parent_vb, parent_cfg])
+proto_dist.add_argument("id", type=str, default=[], nargs='+',
+                        help="id of the structure to retrieve.")
+proto_dist.set_defaults(func=get_proto_dists)
+
+# The count_gs subcommand for counting number of times a prototype appears as the ground state
+count_gs = subparsers.add_parser("count_gs",
+                                 help="Count the number of times prototype(s) appear as the ground stae.",
+                                 parents=[parent_vb, parent_cfg])
+count_gs.add_argument("id", type=str, default=[], nargs='+',
+                      help="id of the prototypes(s) to count.")
+count_gs.set_defaults(func=do_count_gs)
+
+# The 'curtarolo_protos' subcommand.
+curtarolo_protos = subparsers.add_parser("curtarolo_protos",
+                                         help="Parse curtarolo prototypes.",
+                                         parents=[parent_vb, parent_cfg])
+curtarolo_protos.add_argument("proto_file", type=str,
+                              help="The CSV file containing the prototype information.")
+curtarolo_protos.set_defaults(func=find_curatrolo_prototypes)
+
+# The 'count_protos' subcommand.
+count_protos = subparsers.add_parser("count_protos",
+                                     help="List the number of structures for each prototype.",
+                                     parents=[parent_vb, parent_cfg])
+count_protos.set_defaults(func=do_count_protos)
+
+# The 'fix_protos' subcommand.
+fix_protos = subparsers.add_parser("fix_protos",
+                                   help="Fix prototypes.",
+                                   parents=[parent_vb, parent_cfg])
+fix_protos.add_argument("known_protos")
+fix_protos.set_defaults(func=do_fix_protos)
+
+# The 'count_protos' subcommand.
+count_protos = subparsers.add_parser("count_protos",
+                                     help="List the number of structures for each prototype.",
+                                     parents=[parent_vb, parent_cfg])
+count_protos.set_defaults(func=do_count_protos)
+
+# Parse args
+args = parser.parse_args()
+
+splpy.util.init_logging(args, _log)
+
+if not os.path.exists(args.config_file):
+    home_config = os.path.expanduser('~/.ljdb.json')
+    if os.path.exists(home_config):
+        args.config_file = home_config
+
+# Run appropriate subparser function.
+args.func(args)
+
+

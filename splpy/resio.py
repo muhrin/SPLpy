@@ -4,7 +4,7 @@
 Module implementing an Res file object class.
 """
 
-from __future__ import division
+
 
 __author__ = "Martin Uhrin, Georg Schusteritsch"
 __copyright__ = "Copyright 2014, Martin Uhrin"
@@ -152,8 +152,8 @@ class Res(MSONable):
                     except ValueError:
                         info = dict()
                 elif tokens[0] == 'CELL' and len(tokens) == 8:
-                    abc = map(float, tokens[2:5])
-                    ang = map(float, tokens[5:8])
+                    abc = list(map(float, tokens[2:5]))
+                    ang = list(map(float, tokens[5:8]))
                 elif tokens[0] == 'SFAC':
                     for atom_line in lines[line_no:]:
                         if line.strip() == 'END':
@@ -162,11 +162,11 @@ class Res(MSONable):
                             match = coord_patt.search(atom_line)
                             if match:
                                 sp.append(match.group(1))  # 1-indexed
-                                coords.append(map(float, match.groups()[2:5]))  # 0-indexed
+                                coords.append(list(map(float, match.groups()[2:5])))  # 0-indexed
                         line_no += 1  # Make sure the global is updated
             line_no += 1
 
-        return Res(Structure(Lattice.from_lengths_and_angles(abc, ang), sp, coords), info.get('name'),
+        return Res(Structure(Lattice.from_parameters(*abc, *ang), sp, coords), info.get('name'),
                    info.get('pressure'), info.get('energy'), info.get('spacegroup'), info.get('times_found'))
 
     def get_string(self, significant_figures=6):
@@ -185,7 +185,7 @@ class Res(MSONable):
         lines = ['TITL ' + self.print_title()]
 
         # Cell
-        abc_ang = self.structure_.lattice.lengths_and_angles
+        abc_ang = self.structure_.lattice.lengths, self.structure_.lattice.angles
         cell = ' '.join(map(str, abc_ang[0])) + ' ' + ' '.join(map(str, abc_ang[1]))
         lines.append("CELL 1.0 " + cell)
 

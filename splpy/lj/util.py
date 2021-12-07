@@ -2,7 +2,7 @@
 Functions and constants that don't obviously fit elsewhere.
 """
 
-from __future__ import division
+
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2014"
@@ -15,7 +15,7 @@ from abc import ABCMeta, abstractmethod
 
 import pymatgen
 from monty.json import MSONable
-import pymatgen.io.cifio
+import pymatgen.io.cif
 
 from splpy.util import OrderedPair
 import splpy.resio
@@ -39,12 +39,11 @@ class DB:
     ]
 
 
-class Criteriable(object):
+class Criteriable(object, metaclass=ABCMeta):
     """
     This is an abstract class that defines an API for objects that can express
     a MongoDB criteria.  This is done using the to_criteria method.
     """
-    __metaclass__ = ABCMeta
 
     @abstractmethod
     def to_criteria(self):
@@ -122,13 +121,13 @@ class LjInteractions(MSONable, Criteriable):
     def to_dict(self):
         d = {"@module": self.__class__.__module__,
              "@class": self.__class__.__name__}
-        d.update({str(k): v.to_dict for k, v in self._interactions.iteritems()})
+        d.update({str(k): v.to_dict for k, v in list(self._interactions.items())})
         return d
 
     @property
     def to_array(self):
         a = list()
-        for pair, inter in sorted(self.interactions.iteritems(), key=lambda key_value: key_value[0]):
+        for pair, inter in sorted(iter(list(self.interactions.items())), key=lambda key_value: key_value[0]):
             a.append(str(pair))
             a.extend(inter.to_array)
         return a
@@ -136,7 +135,7 @@ class LjInteractions(MSONable, Criteriable):
     @classmethod
     def from_dict(cls, d):
         inters = LjInteractions()
-        for key, value in d.iteritems():
+        for key, value in list(d.items()):
             try:
                 pair = OrderedPair.from_string(key)
                 inters.add_interaction(pair, LjInteraction.from_dict(value))
@@ -149,8 +148,8 @@ class LjInteractions(MSONable, Criteriable):
         crit = dict()
         # Need to flatten the dictionary so the criteria are in the format:
         # {"A~B.epsilon": 1.0, "A~B.sigma": 2.5, etc}
-        for pair, params in self._interactions.iteritems():
-            for param, value in params.to_criteria().iteritems():
+        for pair, params in list(self._interactions.items()):
+            for param, value in list(params.to_criteria().items()):
                 crit["{}.{}".format(str(pair), param)] = value
 
         return crit
@@ -181,7 +180,7 @@ def create_writer(doc, type="res"):
     if type == "res":
         s = splpy.resio.Res.from_dict(doc)
     elif type == "cif":
-        s = pymatgen.io.cifio.CifWriter(doc['structure'])
+        s = pymatgen.io.cif.CifWriter(doc['structure'])
     return s
 
 

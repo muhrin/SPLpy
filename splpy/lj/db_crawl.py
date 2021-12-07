@@ -105,7 +105,7 @@ class Prune(object):
                 ref = unmatched.pop()
 
                 # Collect together the matches
-                inds = filter(lambda i: self._fit(ref, unmatched[i]), xrange(len(unmatched)))
+                inds = [i for i in range(len(unmatched)) if self._fit(ref, unmatched[i])]
                 duplicates = [unmatched[i].splpy_doc for i in inds]
                 # Save the id so we know what it's a duplicate of
                 for duplicate in duplicates:
@@ -117,7 +117,7 @@ class Prune(object):
                     structures_coll.remove({"_id": {"$in": [s["_id"] for s in duplicates]}})
                     duplicates_coll.insert(duplicates)
 
-                    unmatched = [unmatched[i] for i in xrange(len(unmatched)) if i not in inds]
+                    unmatched = [unmatched[i] for i in range(len(unmatched)) if i not in inds]
 
     def _prune_hash(self, structure_doc):
         return structure_doc["pretty_formula"], structure_doc["spacegroup"]["number"]
@@ -151,7 +151,7 @@ class Refine(object):
         self.limit = limit
 
         if not os.path.exists(self.spipe_input):
-            print("Error: {} does not exist.".format(self.spipe_input))
+            print(("Error: {} does not exist.".format(self.spipe_input)))
 
         # Check if spipe is installed
         try:
@@ -299,7 +299,7 @@ class Refine(object):
         d["loadStructures"] = structures_dir
 
         params_dict = dict()
-        for pair, inter in params.interactions.iteritems():
+        for pair, inter in list(params.interactions.items()):
             params_dict[str(pair)] = [inter.epsilon, inter.sigma, inter.m, inter.n, inter.cut]
         potential = d.setdefault("potential", dict())
         potential["lennardJones"] = {"params": params_dict}
@@ -352,7 +352,7 @@ class Refine(object):
                        criteria=crit)
 
         all_structures = list()
-        for formula, strs in structures.iteritems():
+        for formula, strs in list(structures.items()):
             all_structures.extend(strs)
         return all_structures
 

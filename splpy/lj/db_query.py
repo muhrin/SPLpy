@@ -28,6 +28,8 @@ import splpy.util
 
 logger = logging.getLogger(__name__)
 
+__all__ = ['InteractionRange', 'VisitationEngine', 'VisitParamPoints']
+
 
 class InteractionRange(Criteriable):
     """
@@ -126,7 +128,7 @@ class LennardJonesSearchRange(object):
         self.interactions = dict()
 
     def __str__(self):
-        inters = ["{}: {{{}}}".format(pair, inter) for pair, inter in self.interactions.iteritems()]
+        inters = ["{}: {{{}}}".format(pair, inter) for pair, inter in list(self.interactions.items())]
         return ', '.join(inters)
 
     def add_interaction(self, species1, species2, inter):
@@ -134,7 +136,7 @@ class LennardJonesSearchRange(object):
 
     def to_criteria(self):
         c = dict()
-        for species_pair, crit in self.interactions.items():
+        for species_pair, crit in list(self.interactions.items()):
             criteria = self._prepend_keys(crit.to_criteria(), species_pair)
             if criteria is not None:
                 c.update(criteria)
@@ -143,7 +145,7 @@ class LennardJonesSearchRange(object):
 
     def _prepend_keys(self, criteria, pre):
         crit = dict()
-        for key, value in criteria.iteritems():
+        for key, value in list(criteria.items()):
             crit["{}.{}".format(pre, key)] = value
         return crit
 
@@ -154,7 +156,7 @@ class LennardJonesSearchRange(object):
     @classmethod
     def from_dict(cls, d):
         r = LennardJonesSearchRange()
-        for pair, inter in d.iteritems():
+        for pair, inter in list(d.items()):
             species = OrderedPair.from_string(pair)
             r.add_interaction(species.first, species.second, InteractionRange.from_dict(inter))
         return r
@@ -294,7 +296,7 @@ def get_unique(query_engine, params, matcher, criteria=None, limit=None, save_do
     unique = list()
     while len(lowest) > 0:
         formula, spacegroups = lowest.popitem()
-        for sg, structures in spacegroups.iteritems():
+        for sg, structures in list(spacegroups.items()):
             unique.extend(structures)
 
     return unique
@@ -306,7 +308,7 @@ def surrounding_range(params, dist):
     in each parameter direction
     """
     range = LennardJonesSearchRange()
-    for pair, val in params.interactions.iteritems():
+    for pair, val in list(params.interactions.items()):
         d = val.__dict__
         intervals = dict()
         for param in ["epsilon", "sigma", "m", "n", "cut"]:

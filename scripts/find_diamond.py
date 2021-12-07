@@ -35,16 +35,16 @@ class DiamondFinder:
 
         structure_dict = doc['structure']
         for site in structure_dict['sites']:
-            site['label'] = u'B'
-            site['species'] = [{u'occu': 1, u'element': u'B'}]
+            site['label'] = 'B'
+            site['species'] = [{'occu': 1, 'element': 'B'}]
         structure = mg.Structure.from_dict(structure_dict)
         sg = mg.symmetry.finder.SymmetryFinder(structure, normalised_symmetry_precision(structure), -1)
 
         if sg.get_spacegroup_number() == 227 and self.matcher.fit(self.diamond, structure):
             params = doc['potential']['params']
-            print('Found diamond: {}'.format(doc['_id']))
-            print('{} {} {} {}'.format(params['A~B']['epsilon'], params['A~B']['sigma'], params['B~B']['epsilon'],
-                                       params['B~B']['sigma']))
+            print(('Found diamond: {}'.format(doc['_id'])))
+            print(('{} {} {} {}'.format(params['A~B']['epsilon'], params['A~B']['sigma'], params['B~B']['epsilon'],
+                                       params['B~B']['sigma'])))
             res = splpy.resio.Res(structure, doc['_id'])
             res.write_file('{}.res'.format(doc['_id']))
 

@@ -3,7 +3,6 @@ This module provides a QueryEngine that simplifies queries for Mongo databases
 generated using hive.
 """
 
-from __future__ import division
 
 __author__ = "Martin Uhrin"
 __copyright__ = "Copyright 2014"
@@ -12,17 +11,17 @@ __maintainer__ = "Martin Uhrin"
 __email__ = "martin.uhrin.10@ucl.ac.uk"
 __date__ = "July 23, 2014"
 
-
 import pymongo
 from bson.objectid import ObjectId
 
-from matgendb.query_engine import QueryEngine
+from pymatgen.db.query_engine import QueryEngine
 
-from pymatgen import Structure, Composition
-from pymatgen.entries.computed_entries import ComputedEntry, \
-    ComputedStructureEntry
+from pymatgen.core import Structure, Composition
+from pymatgen.entries.computed_entries import ComputedEntry, ComputedStructureEntry
 
 import splpy.lj.db_query
+
+__all__ = ['LjQueryEngine']
 
 
 class LjQueryEngine(QueryEngine):
@@ -175,22 +174,24 @@ class LjQueryEngine(QueryEngine):
         parsed_crit = dict()
         try:
             potparams = criteria.pop("potential.params")
-            params_range = splpy.lj.db_query.LennardJonesSearchRange.from_dict(potparams)
+            params_range = splpy.lj.db_query.LennardJonesSearchRange.from_dict(
+                potparams)
             parsed_crit.update(self.get_param_id_criteria(params_range))
         except KeyError:
             pass
 
-        for key, value in criteria.items():
+        for key, value in list(criteria.items()):
             try:
                 if value.startswith("ObjectId"):
                     parsed_crit[key] = ObjectId(value[10:len(value) - 2])
             except AttributeError:
                 pass
         # Remove the ones we've dealt with
-        for key in parsed_crit.keys():
+        for key in list(parsed_crit.keys()):
             criteria.pop(key)
 
-        parsed_crit.update(super(LjQueryEngine, self)._parse_criteria(criteria))
+        parsed_crit.update(
+            super(LjQueryEngine, self)._parse_criteria(criteria))
         return parsed_crit
 
     def get_param_ids(self, crit=None):
@@ -224,6 +225,7 @@ class LjQueryEngine(QueryEngine):
         for id in self.get_param_ids(params_range.to_criteria()):
             crit = criteria if criteria is not None else dict()
             crit["potential.params_id"] = id
-            points.append((id, super(LjQueryEngine, self).query(properties, crit)))
+            points.append(
+                (id, super(LjQueryEngine, self).query(properties, crit)))
 
         return points

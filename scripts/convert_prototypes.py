@@ -23,7 +23,7 @@ def parse_criteria_or_die(crit):
         try:
             criteria = json.loads(crit)
         except ValueError:
-            print("Criteria {} is not a valid JSON string!".format(crit))
+            print(("Criteria {} is not a valid JSON string!".format(crit)))
             sys.exit(-1)
     return criteria
 
@@ -43,7 +43,7 @@ def init_criteria(args):
     except AttributeError:
         pass
 
-    for key, value in criteria.iteritems():
+    for key, value in criteria.items():
         try:
             if value.startswith("ObjectId"):
                 criteria[key] = bson.objectid.ObjectId(value[10:len(value) - 2])
@@ -84,7 +84,7 @@ prototypes = db['prototypes']
 criteria = init_criteria(args)
 updated = 0
 for doc in prototypes.find(criteria):
-    print("Updating {}: ({})".format(doc["_id"], updated))
+    print(("Updating {}: ({})".format(doc["_id"], updated)))
     new_proto = prototype.create_prototype(Structure.from_dict(doc["structure"]))
 
     sg = SymmetryFinder(new_proto, 0.01, angle_tolerance=-1)
